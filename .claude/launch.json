@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "morning-web",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["src/main.py"],
+      "env": { "MORNING_WEB": "1", "PYTHONUNBUFFERED": "1" },
+      "port": 8550
+    },
+    {
+      "name": "morning-web-nba-test",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["src/main.py"],
+      "env": { "MORNING_WEB": "1", "PYTHONUNBUFFERED": "1", "NBA_DAY": "2026-04-10" },
+      "port": 8550
+    }
+  ]
+}
