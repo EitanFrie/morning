@@ -173,6 +173,19 @@ class Section:
             self.status.value = "Refreshing…"
             self.status.color = ft.Colors.PRIMARY
 
+    def show_progress(self, title: str, note: str = ""):
+        """A long download (e.g. the weekly Torah bundle): tell the user what's happening."""
+        self.status.value = title
+        self.status.color = ft.Colors.PRIMARY
+        self.body.content = ft.Container(
+            ft.Column([ft.ProgressRing(width=36, height=36),
+                       ft.Text(title, size=16, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER),
+                       ft.Text(note, size=12, color=ft.Colors.ON_SURFACE_VARIANT, text_align=ft.TextAlign.CENTER)],
+                      horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=12, rtl=True),
+            padding=40, alignment=ft.Alignment.CENTER,
+        )
+        self.app.page.update()
+
     def show_error(self, message: str):
         self.error = message
         if self.app.cache.get(self.source.id) is None:

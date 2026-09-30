@@ -3,21 +3,27 @@ Daily Torah portion: this week's parasha split into its 7 aliyot - one per day
 (Sunday = 1st ... Shabbat = 7th). Every verse is followed by the chosen commentator.
 
 Sefaria API (free, no key - https://developers.sefaria.org):
-  /api/calendars                       -> this week's parasha + its aliyot refs
-  /api/v3/texts/{aliyah}               -> the verses (Hebrew)
-  /api/v3/texts/{Commentator on aliyah} -> that commentator, as a list of comments per verse
-Only the chosen day + commentator is downloaded (~20 KB), so switching is quick.
-(The "links with text" API would bring every commentator at once, but it is ~7 MB per aliyah.)
+  /api/calendars                   -> this week's parasha + its aliyot refs
+  /api/v3/texts/{aliyah}           -> the verses (Hebrew)
+  /api/links/{aliyah}?with_text=1  -> ALL commentators on the aliyah, with their text
+
+Once per week (new parasha, or nothing stored) the whole week - 7 aliyot with all
+commentators - is downloaded (~50 MB of downloads), reduced to what we show, and saved to
+torah_week.json. The previous week's file is deleted first (holiday weeks too).
+After that, switching day or commentator needs no internet at all.
 """
 
 import asyncio
+import json
 import re
 from datetime import datetime
 
 import flet as ft
+import httpx
 from bs4 import BeautifulSoup
 
 from core.source import Source
+from core.storage import data_dir
 from core.text import clean
 from ui.widgets import empty_message, feed_row, fs
 
@@ -28,6 +34,7 @@ COMMENTATORS = [  # (Sefaria name, Hebrew name)
     ("Or HaChaim", "אור החיים"), ("Rashbam", 'רשב"ם'), ("Kli Yakar", "כלי יקר"),
     ("Baal HaTurim", "בעל הטורים"), ("Haamek Davar", "העמק דבר"), ("Malbim", 'מלבי"ם'),
 ]
+WEEK_FILE = data_dir() / "torah_week.json"
 _TEAMIM = re.compile(r"[֑-ֽ֯]")  # cantillation marks (keep the nikud)
 
 
@@ -48,40 +55,51 @@ class TorahPortion(Source):
 
     async def fetch(self, app):
         day = today_index() if self.day is None else self.day
-        commentator = app.settings["torah_commentator"]
-        client = app.client
-
-        calendar = (await client.get(f"{API}/calendars", params={"diaspora": 0, "custom": "ashkenazi"})).json()
+        calendar = (await app.client.get(f"{API}/calendars",
+                                         params={"diaspora": 0, "custom": "ashkenazi"})).json()
         parasha = next(i for i in calendar["calendar_items"] if i["title"]["en"] == "Parashat Hashavua")
-        aliyot = parasha["extraDetails"]["aliyot"][:7]  # holidays may add an 8th (maftir)
-        ref = aliyot[min(day, len(aliyot) - 1)]
+        week = await self._week(app, parasha)
 
-        params = {"version": "hebrew", "return_format": "text_only"}
-        verses_resp, comm_resp = await asyncio.gather(
-            client.get(f"{API}/v3/texts/{ref}", params=params),
-            client.get(f"{API}/v3/texts/{commentator} on {ref}", params=params),
-        )
-        verses_json = verses_resp.json()
-        start = [int(x) for x in verses_json["sections"]]  # [chapter, verse]
-        multi = verses_json["sections"][0] != verses_json["toSections"][0]
-        verses = _by_verse(verses_json["versions"][0]["text"], start, multi)
-
-        comments = {}
-        if comm_resp.status_code == 200 and comm_resp.json().get("versions"):
-            comments = _by_verse(comm_resp.json()["versions"][0]["text"], start, multi)
-
+        today = week["days"][min(day, len(week["days"]) - 1)]
+        # commentators that really exist on this aliyah - Rashi first, then the most active
+        counts = {en: sum(1 for v in today["commentary"].values() if en in v) for en in today["names"]}
+        available = sorted(today["names"], key=lambda en: (en != "Rashi", -counts[en]))
+        commentator = app.settings["torah_commentator"]
         return {
-            "parasha": parasha["displayValue"]["he"],
-            "ref": parasha["ref"],
-            "aliyah_ref": ref,
+            "parasha": week["parasha"],
+            "aliyah_ref": today["ref"],
             "day": day,
             "commentator": commentator,
+            "commentator_he": today["names"].get(commentator, commentator),
+            "available": [[en, today["names"][en]] for en in available],
             "verses": [
-                {"label": f"{c}:{v}", "text": _TEAMIM.sub("", clean(_strip_html(text))),
-                 "comments": [clean(_strip_html(x)) for x in comments.get((c, v), []) if x]}
-                for (c, v), text in verses.items()
+                {**v, "comments": today["commentary"].get(v["label"], {}).get(commentator, [])}
+                for v in today["verses"]
             ],
         }
+
+    async def _week(self, app, parasha) -> dict:
+        """This week's bundle from disk, or download it (deleting last week's)."""
+        key = parasha["ref"]
+        if WEEK_FILE.exists():
+            try:
+                week = json.loads(WEEK_FILE.read_text(encoding="utf-8"))
+                if week.get("key") == key:
+                    return week
+            except (OSError, ValueError):
+                pass
+            WEEK_FILE.unlink(missing_ok=True)  # a new week: delete the old one
+
+        section = app.sections[self.id]
+        aliyot = parasha["extraDetails"]["aliyot"][:7]  # holidays may add an 8th (maftir)
+        days = []
+        for i, ref in enumerate(aliyot):
+            section.show_progress(f"מוריד את תוכן השבוע… {i + 1}/{len(aliyot)}",
+                                  "זה קורה פעם בשבוע, אחר כך הכל זמין גם בלי אינטרנט")
+            days.append(await _download_aliyah(app.client, ref))
+        week = {"key": key, "parasha": parasha["displayValue"]["he"], "days": days}
+        WEEK_FILE.write_text(json.dumps(week, ensure_ascii=False), encoding="utf-8")
+        return week
 
     # ------------------------------------------------------------------ UI
 
@@ -99,13 +117,23 @@ class TorahPortion(Source):
         return [
             ft.Dropdown(value=str(day), width=110, dense=True, on_select=pick_day,
                         options=[ft.DropdownOption(key=str(i), text=d) for i, d in enumerate(DAYS)]),
-            ft.Dropdown(value=app.settings["torah_commentator"], width=140, dense=True,
-                        on_select=pick_commentator,
-                        options=[ft.DropdownOption(key=en, text=he) for en, he in COMMENTATORS]),
+            ft.Dropdown(value=app.settings["torah_commentator"], width=150, dense=True,
+                        on_select=pick_commentator, enable_filter=True,
+                        options=[ft.DropdownOption(key=en, text=he) for en, he in self._choices(app)]),
         ]
 
+    def _choices(self, app) -> list:
+        """Commentators found in the downloaded week (fallback: the classic list)."""
+        entry = app.cache.get(self.id)
+        choices = entry["data"].get("available") if entry else None
+        choices = [tuple(c) for c in choices] if choices else list(COMMENTATORS)
+        current = app.settings["torah_commentator"]
+        if current not in [en for en, _ in choices]:
+            choices.insert(0, (current, dict(COMMENTATORS).get(current, current)))
+        return choices
+
     def render(self, data, app):
-        heb = dict(COMMENTATORS).get(data["commentator"], data["commentator"])
+        heb = data.get("commentator_he") or data["commentator"]
         rows: list[ft.Control] = [
             ft.Container(
                 ft.Column([
@@ -135,6 +163,77 @@ class TorahPortion(Source):
 
 
 # ---------------------------------------------------------------- helpers
+
+
+async def _download_aliyah(client, ref: str) -> dict:
+    """One aliyah: its verses + every commentator's Hebrew text, grouped by verse."""
+    params = {"version": "hebrew", "return_format": "text_only"}
+    verses_json = (await client.get(f"{API}/v3/texts/{ref}", params=params, timeout=60)).json()
+    start = [int(x) for x in verses_json["sections"]]  # [chapter, verse]
+    multi = verses_json["sections"][0] != verses_json["toSections"][0]
+    verses = _by_verse(verses_json["versions"][0]["text"], start, multi)
+
+    # All commentators with text, one verse per request (a whole aliyah at once is ~7 MB
+    # and the server often cuts such big answers off). 4 verses at a time.
+    book = ref.rsplit(" ", 1)[0].replace(" ", "_")
+    limit = asyncio.Semaphore(4)
+
+    async def verse_links(c, v):
+        async with limit:
+            return await _get_json(client, f"{API}/links/{book}.{c}.{v}", {"with_text": 1})
+
+    per_verse = await asyncio.gather(*(verse_links(c, v) for c, v in verses))
+    found = []  # (verse label, commentator, order, text)
+    names = {}
+    for (c, v), links in zip(verses, per_verse):
+        for link in links:
+            if link.get("category") != "Commentary" or not link.get("he"):
+                continue
+            texts = link["he"] if isinstance(link["he"], list) else [link["he"]]
+            text = "\n".join(t for t in (clean(_strip_html(str(x))) for x in _flatten(texts)) if t)
+            if not text:
+                continue
+            en, he = link["collectiveTitle"]["en"], link["collectiveTitle"]["he"]
+            names[en] = he
+            found.append((f"{c}:{v}", en, float(link.get("commentaryNum") or 0), text))
+
+    commentary: dict[str, dict[str, list[str]]] = {}
+    for label, en, _, text in sorted(found, key=lambda f: f[2]):
+        commentary.setdefault(label, {}).setdefault(en, []).append(text)
+    return {
+        "ref": ref,
+        "verses": [{"label": f"{c}:{v}", "text": _TEAMIM.sub("", clean(_strip_html(t)))}
+                   for (c, v), t in verses.items()],
+        "commentary": commentary,
+        "names": names,
+    }
+
+
+async def _get_json(client, url: str, params: dict, attempts: int = 3):
+    """Big responses (several MB) sometimes get cut off by the server - just try again."""
+    for attempt in range(attempts):
+        try:
+            response = await client.get(url, params=params, timeout=180)
+            response.raise_for_status()
+            return response.json()
+        except (httpx.HTTPError, ValueError):
+            if attempt == attempts - 1:
+                raise
+            await asyncio.sleep(2 * (attempt + 1))
+
+
+def _url_ref(ref: str) -> str:
+    """'Deuteronomy 14:22-14:29' -> 'Deuteronomy.14.22-14.29' (the links API needs this form)."""
+    book, place = ref.rsplit(" ", 1)
+    return book.replace(" ", "_") + "." + place.replace(":", ".")
+
+
+def _flatten(items):
+    for x in items:
+        if isinstance(x, list):
+            yield from _flatten(x)
+        else:
+            yield x
 
 
 def _strip_html(text: str) -> str:

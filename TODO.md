@@ -5,17 +5,17 @@ Done: 4th window, parasha from Sefaria calendar, aliyah by weekday (Sun=1st … 
 day picker, commentator picker (default Rashi, saved), verse + commentary rows, ~20 KB per load.
 Tested against live Sefaria (all 7 days, Rashi & Ramban). Not yet seen on screen/phone.
 
+Weekly bundle (done): once per parasha the whole week is downloaded - every verse with ALL
+commentators (Sefaria /api/links per verse, 4 at a time, with retries) - and saved to
+torah_week.json (~1.5 MB). New parasha (holidays too) -> old file deleted first.
+Measured: ~45 s for the full week, then switching day/commentator ~0.2 s, offline.
+The window shows "מוריד את תוכן השבוע… n/7" while downloading.
+(A whole aliyah in ONE links request was ~7 MB and the server kept cutting it off.)
+
 Still to do / check:
-- Look at it in the app (layout of the two dropdowns in the header on a phone).
-- Aliyah that crosses chapters (e.g. "Exodus 11:4-12:20"): mapping code exists, untested —
-  this week (Shemini Atzeret) has none.
-- Offline: only the last viewed day+commentator is cached. Optionally pre-download all 7 days
-  of the week for the chosen commentator (small: ~7 × 20 KB), replace on a new parasha.
-- Holidays: Sefaria returns the holiday reading as "Parashat Hashavua" (may have 8 aliyot;
-  we use the first 7). Decide if that's the wanted behaviour.
-- Commentator list is fixed (10 classics); could be built from `/api/related/{ref}`
-  (commentators that really exist for the aliyah) — ~1.3 MB, so maybe once per week.
-- Don't use `/api/links/{ref}?with_text=1`: ~7 MB per aliyah.
+- See it in the app on screen + phone (two dropdowns in the header; commentator list has ~34 names).
+- Aliyah crossing chapters (e.g. "Exodus 11:4-12:20"): mapping code exists, untested this week.
+- If the download is interrupted halfway, it simply starts over next time (nothing partial is saved).
 
 ## Fixed APK signing key
 Each CI build currently signs with a throwaway key, so a new APK may refuse to install over
