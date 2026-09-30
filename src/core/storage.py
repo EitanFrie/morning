@@ -62,9 +62,10 @@ DEFAULT_SETTINGS = {
     "inn_hours_back": 10,       # how many hours of news flashes to show
     "science_count": 3,         # 3 or 6 science articles
     "timezone": "Asia/Jerusalem",  # used to show NBA tip-off times
+    "torah_commentator": "Rashi",  # Sefaria name of the chosen commentator
     # A source refreshes by itself when the app is opened (or brought back)
     # and its data is older than this many minutes.
-    "refresh_minutes": {"inn": 30, "nba": 10, "science": 360},
+    "refresh_minutes": {"inn": 30, "nba": 10, "science": 360, "torah": 720},
 }
 
 

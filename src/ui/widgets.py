@@ -166,6 +166,7 @@ def feed_row(
     on_toggle=None,
     title_bold: bool = True,
     center: bool = False,
+    title_lines: int | None = 2,
 ) -> ft.Control:
     """
     The single item format used by EVERY section:
@@ -185,8 +186,8 @@ def feed_row(
                       ft.Text(meta, text_align=align, size=fs(app, 12), color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600))
     # title: plain text, or a list of TextSpans for mixed styling (e.g. dimmed losing team)
     spans = title if isinstance(title, list) else None
-    middle.append(ft.Text(None if spans else title, spans=spans, size=fs(app, 16), max_lines=2, text_align=align,
-                          overflow=ft.TextOverflow.ELLIPSIS,
+    middle.append(ft.Text(None if spans else title, spans=spans, size=fs(app, 16), max_lines=title_lines, text_align=align,
+                          overflow=ft.TextOverflow.ELLIPSIS if title_lines else None,
                           weight=ft.FontWeight.W_600 if title_bold else None))
     if subtitle:
         middle.append(ft.Text(subtitle, text_align=align, size=fs(app, 12.5), color=ft.Colors.ON_SURFACE_VARIANT,

@@ -1,40 +1,25 @@
 # TODO
 
-## Daily Torah portion (פרשת השבוע + commentator) — planned, not built yet
+## Daily Torah portion — first version BUILT (src/sources/torah_portion.py)
+Done: 4th window, parasha from Sefaria calendar, aliyah by weekday (Sun=1st … Shabbat=7th),
+day picker, commentator picker (default Rashi, saved), verse + commentary rows, ~20 KB per load.
+Tested against live Sefaria (all 7 days, Rashi & Ramban). Not yet seen on screen/phone.
 
-Replaces the old `test.py` experiment (Sefaria API + Twilio/WhatsApp). In this app it
-becomes a 4th category window (`src/sources/torah_portion.py`), no WhatsApp needed.
+Still to do / check:
+- Look at it in the app (layout of the two dropdowns in the header on a phone).
+- Aliyah that crosses chapters (e.g. "Exodus 11:4-12:20"): mapping code exists, untested —
+  this week (Shemini Atzeret) has none.
+- Offline: only the last viewed day+commentator is cached. Optionally pre-download all 7 days
+  of the week for the chosen commentator (small: ~7 × 20 KB), replace on a new parasha.
+- Holidays: Sefaria returns the holiday reading as "Parashat Hashavua" (may have 8 aliyot;
+  we use the first 7). Decide if that's the wanted behaviour.
+- Commentator list is fixed (10 classics); could be built from `/api/related/{ref}`
+  (commentators that really exist for the aliyah) — ~1.3 MB, so maybe once per week.
+- Don't use `/api/links/{ref}?with_text=1`: ~7 MB per aliyah.
 
-**Idea:** the weekly parasha is split into its 7 aliyot. Each day shows one aliyah
-(Sunday = 1st … Shabbat = 7th). Every verse is shown with the chosen commentator's
-comment right under it. Default commentator: Rashi.
-
-### API (Sefaria, free, no key)
-Docs: https://developers.sefaria.org
-1. `GET https://www.sefaria.org/api/calendars?diaspora=0&custom=ashkenazi`
-   → item with title "Parashat Hashavua": `displayValue` (name), `extraDetails.aliyot`
-   = list of 7 (sometimes 8 with maftir) refs, e.g. `"Exodus 11:4-12:20"`.
-2. Verse text (Hebrew): `GET /api/v3/texts/{ref}?version=hebrew&return_format=text_only`
-3. Commentary for the WHOLE aliyah in one call (instead of the old loop that asked
-   verse-by-verse, up to 177 requests):
-   `GET /api/links/{ref}?with_text=1` → keep links with `category == "Commentary"`;
-   each has `collectiveTitle` (he/en), `anchorRef` (which verse) and `he`/`text`.
-   → group by `anchorRef` verse and by commentator.
-
-### Behaviour
-- fetch(): download all 7 aliyot of the week + their commentary once, cache it.
-  Cache key = parasha name + week; a new week (Sunday) → drop the old cache, download the new one.
-  (Maybe only download the day's aliyah first, the rest in the background — check size.)
-- Commentator picker in the window header (dropdown). Options = commentators that
-  actually exist in this week's data (not every commentator covers every parasha).
-  Default Rashi, choice saved in settings.
-- Day picker (Sun…Shabbat chips) in the header; default = today. Lets you catch up on a missed day.
-- Row format: feed_row per verse — meta = verse number (פרק:פסוק), headline = verse text,
-  details (expand) = commentator text. Or show commentary always-open; decide when testing.
-- RTL, Hebrew text; strip HTML tags that Sefaria includes (`<b>`, `<small>`, footnotes).
-
-### Bugs noticed in the old test.py (for reference)
-- Weekday → aliyah index: Shabbat produced 7 (out of range for 0–6). Use
-  `(datetime.today().weekday() + 1) % 7` → Sun=0 … Sat=6.
-- Verse-by-verse `/api/related` loop is slow; use `/api/links/{range}?with_text=1`.
-- Israel vs. diaspora readings can differ some weeks: keep `diaspora=0` (Israel).
+## Fixed APK signing key
+Each CI build currently signs with a throwaway key, so a new APK may refuse to install over
+the old one ("App not installed") → you'd have to uninstall first (losing settings/cache).
+Fix: generate one keystore (`keytool -genkey ...`), store it base64 in a GitHub secret,
+decode it in `build-apk.yml` and pass it to `flet build apk` (`--android-signing-key-store`,
+`--android-signing-key-alias`, passwords via env/secrets).
