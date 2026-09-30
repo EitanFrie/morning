@@ -1,6 +1,15 @@
 """
-One section of the feed: header (badge, title, "updated x ago", refresh button)
-plus a body that smoothly switches between skeleton / content / error.
+One category "window" - fills the whole screen (one page of the feed).
+
+    ┌──────────────────────────────────────────┐
+    │ [←] badge  Title / status   extras   ↻  │  header
+    │──────────────────────────────────────────│
+    │  list of rows (scrolls inside the window)│  list layer
+    │  …or a detail (box score / article) that │  detail layer, slides over the list
+    │  covers only THIS window                 │
+    └──────────────────────────────────────────┘
+
+Scrolling past the top/bottom of the window moves to the previous/next window.
 """
 
 from typing import TYPE_CHECKING
@@ -8,10 +17,14 @@ from typing import TYPE_CHECKING
 import flet as ft
 
 from core.source import Source
-from ui.widgets import RoundButton, error_box, fs, icon_badge, skeleton, time_ago
+from ui.widgets import RADIUS, RoundButton, error_box, fs, icon_badge, skeleton, time_ago
 
 if TYPE_CHECKING:
     from app import App
+
+OVERSCROLL_TO_SWITCH = 70  # px of "pulling" past the edge before switching window
+HIDDEN = ft.Offset(1.05, 0)
+SHOWN = ft.Offset(0, 0)
 
 
 class Section:
@@ -20,39 +33,117 @@ class Section:
         self.app = app
         self.loading = False
         self.error: str | None = None
+        self.detail_open = False
+        self._pull = 0.0  # accumulated overscroll of the current gesture
 
+        # ---- header ----
         self.status = ft.Text(size=12, color=ft.Colors.ON_SURFACE_VARIANT)
-        self.refresh_button = RoundButton(
-            ft.Icons.REFRESH_ROUNDED, on_click=self._on_refresh_click, tooltip="Refresh"
+        self.title = ft.Text(source.title, size=fs(app, 20), weight=ft.FontWeight.BOLD,
+                             max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
+        self.back_button = ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, visible=False, tooltip="Back",
+                                         on_click=lambda e: self.close_detail())
+        self.badge = icon_badge(source.icon, source.color)
+        self.extras = ft.Row(spacing=0, tight=True)
+        self.detail_actions = ft.Row(spacing=0, tight=True, visible=False)
+        self.refresh_button = RoundButton(ft.Icons.REFRESH_ROUNDED, on_click=self._on_refresh_click,
+                                          tooltip="Refresh")
+        header = ft.Container(
+            ft.Row(
+                [self.back_button, self.badge,
+                 ft.Column([self.title, self.status], spacing=0, expand=True),
+                 self.extras, self.detail_actions, self.refresh_button],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.Padding.only(left=14, right=12, top=12, bottom=10),
         )
-        self.extras = ft.Row(spacing=4, tight=True)
-        # Thin bar under the header while refreshing data that is already shown.
-        self.progress = ft.ProgressBar(height=3, border_radius=3, visible=False)
+        self.progress = ft.ProgressBar(height=2, visible=False)
+
+        # ---- list layer ----
         self.body = ft.AnimatedSwitcher(
-            content=skeleton(with_image=source.id == "science"),
+            content=skeleton(image=source.id != "inn"),
             duration=350,
             reverse_duration=150,
             transition=ft.AnimatedSwitcherTransition.FADE,
             switch_in_curve=ft.AnimationCurve.EASE_OUT,
         )
+        self.list_layer = self._scroller(self.body)
 
-        self.title = ft.Text(source.title, size=fs(app, 21), weight=ft.FontWeight.BOLD)
-        header = ft.Row(
-            [
-                icon_badge(source.icon, source.color),
-                ft.Column([self.title, self.status], spacing=0, expand=True),
-                self.extras,
-                self.refresh_button,
-            ],
-            spacing=12,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-        self.control = ft.Container(
-            content=ft.Column([header, self.progress, self.body], spacing=12),
-            padding=ft.Padding.only(bottom=8),
+        # ---- detail layer (slides in from the side, covers only this window) ----
+        self.detail_layer = ft.Container(
+            left=0, top=0, right=0, bottom=0,
+            offset=HIDDEN,
+            animate_offset=ft.Animation(320, ft.AnimationCurve.EASE_OUT_CUBIC),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
         )
 
-    # ---- state changes -------------------------------------------------
+        self.window = ft.Container(
+            content=ft.Column(
+                [header, ft.Divider(height=1), self.progress,
+                 ft.Stack([ft.Container(self.list_layer, left=0, top=0, right=0, bottom=0),
+                           self.detail_layer], expand=True)],
+                spacing=0,
+            ),
+            expand=True,
+            border_radius=RADIUS,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        )
+
+    # ---------------------------------------------------------------- scrolling
+
+    def _scroller(self, content: ft.Control) -> ft.Column:
+        """A scroll area inside the window that hands over to the next/previous
+        window when you keep pulling at its end."""
+        return ft.Column([content], scroll=ft.ScrollMode.AUTO, expand=True,
+                         on_scroll=self._on_scroll, scroll_interval=30)
+
+    async def _on_scroll(self, e: ft.OnScrollEvent):
+        if e.event_type == ft.ScrollType.START:
+            self._pull = 0
+        elif e.event_type == ft.ScrollType.OVERSCROLL and e.overscroll:
+            self._pull += e.overscroll
+            if abs(self._pull) >= OVERSCROLL_TO_SWITCH:
+                direction = 1 if self._pull > 0 else -1
+                self._pull = 0
+                await self.app.move_window(self.source.id, direction)
+
+    # ---------------------------------------------------------------- detail
+
+    def open_detail(self, title: str, content: ft.Control, actions: list[ft.Control] | None = None):
+        """Show a box score / article inside this window only."""
+        self.detail_layer.content = self._scroller(content)
+        self.detail_layer.offset = SHOWN
+        self.detail_open = True
+        self.back_button.visible = True
+        self.badge.visible = False
+        self.extras.visible = False
+        self.detail_actions.controls = actions or []
+        self.detail_actions.visible = True
+        self.title.value = title
+        self.status.value = self.source.title
+        self.status.color = ft.Colors.PRIMARY
+        self.app.page.update()
+
+    def set_detail_content(self, content: ft.Control):
+        """Replace the detail (e.g. when an article finished downloading)."""
+        if self.detail_open:
+            self.detail_layer.content = self._scroller(content)
+            self.app.page.update()
+
+    def close_detail(self):
+        self.detail_layer.offset = HIDDEN
+        self.detail_open = False
+        self.back_button.visible = False
+        self.badge.visible = True
+        self.extras.visible = True
+        self.detail_actions.visible = False
+        self.title.value = self.source.title
+        self.update_status()
+        self.app.page.update()
+
+    # ---------------------------------------------------------------- state
 
     def show_cached(self):
         """Render whatever is in the cache (instant, works offline)."""
@@ -62,7 +153,12 @@ class Section:
         self.update_status()
 
     def rerender(self):
-        self.title.size = fs(self.app, 21)
+        self.title.size = fs(self.app, 20)
+        self.extras.controls = self.source.header_extras(self.app)
+        self.show_cached()
+
+    def show_data(self):
+        self.error = None
         self.extras.controls = self.source.header_extras(self.app)
         self.show_cached()
 
@@ -72,8 +168,8 @@ class Section:
         self.refresh_button.set_busy(loading)
         self.progress.visible = loading and has_data
         if loading and not has_data:
-            self.body.content = skeleton(with_image=self.source.id == "science")
-        if loading:
+            self.body.content = skeleton(image=self.source.id != "inn")
+        if loading and not self.detail_open:
             self.status.value = "Refreshing…"
             self.status.color = ft.Colors.PRIMARY
 
@@ -84,6 +180,8 @@ class Section:
         self.update_status()
 
     def update_status(self):
+        if self.detail_open:
+            return  # the header shows the detail's title meanwhile
         age = self.app.cache.age_minutes(self.source.id)
         if self.error:
             self.status.value = "Offline · " + (time_ago(age).lower() if age is not None else "no data")
@@ -92,18 +190,11 @@ class Section:
             self.status.value = time_ago(age)
             self.status.color = ft.Colors.ON_SURFACE_VARIANT
 
-    # ---- internals -------------------------------------------------------
-
     def _render(self, data):
         try:
             self.body.content = self.source.render(data, self.app)
         except Exception as ex:  # a bug in one source must never break the whole app
             self.body.content = error_box(f"Display error: {ex}", self._on_refresh_click)
-
-    def show_data(self):
-        self.error = None
-        self.extras.controls = self.source.header_extras(self.app)
-        self.show_cached()
 
     async def _on_refresh_click(self, e=None):
         await self.app.refresh(self.source)

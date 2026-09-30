@@ -15,8 +15,8 @@ from bs4 import BeautifulSoup
 
 from core.source import Source
 from core.text import clean
-from ui.reader import open_reader
-from ui.widgets import card, fs, pill
+from ui.reader import open_article
+from ui.widgets import feed_row, thumb
 
 LIST_URL = "https://davidson.org.il/read-experience/sciencenews/"
 MAX_ARTICLES = 6
@@ -49,11 +49,7 @@ class DavidsonScience(Source):
 
     def render(self, data, app):
         count = app.settings["science_count"]
-        articles = data["articles"][:count]
-        cards = [
-            ft.Container(_article_card(a, app), col={"xs": 12, "md": 6, "xl": 4})
-            for a in articles
-        ]
+        rows: list[ft.Control] = [_article_row(a, app) for a in data["articles"][:count]]
         more = count < len(data["articles"])
 
         def toggle_count(e):
@@ -61,43 +57,27 @@ class DavidsonScience(Source):
             app.sections[self.id].rerender()
             app.page.update()
 
-        toggle = ft.TextButton(
-            f"הצג {len(data['articles'])} כתבות" if more else "הצג פחות",
-            icon=ft.Icons.EXPAND_MORE_ROUNDED if more else ft.Icons.EXPAND_LESS_ROUNDED,
-            on_click=toggle_count,
-        )
-        return ft.Column(
-            [ft.ResponsiveRow(cards, spacing=14, run_spacing=14), ft.Row([toggle], alignment=ft.MainAxisAlignment.CENTER)],
-            rtl=True,
-            spacing=6,
-        )
+        rows.append(ft.Row(
+            [ft.TextButton(
+                f"הצג {len(data['articles'])} כתבות" if more else "הצג פחות",
+                icon=ft.Icons.EXPAND_MORE_ROUNDED if more else ft.Icons.EXPAND_LESS_ROUNDED,
+                on_click=toggle_count,
+            )],
+            alignment=ft.MainAxisAlignment.CENTER,
+        ))
+        return ft.Column(rows, spacing=0, rtl=True)
 
 
-def _article_card(article: dict, app) -> ft.Control:
-    meta = " · ".join(x for x in [article.get("author"), article.get("date"), article.get("reading_time")] if x)
-    parts: list[ft.Control] = []
-    if article.get("image"):
-        parts.append(
-            ft.Image(src=article["image"], height=170, fit=ft.BoxFit.COVER,
-                     width=float("inf"), fade_in_animation=ft.Animation(300))
-        )
-    parts.append(
-        ft.Container(
-            padding=16,
-            content=ft.Column(
-                [
-                    ft.Row([pill(c, ft.Colors.TEAL_600) for c in article.get("categories", [])[:2]],
-                           wrap=True, spacing=6),
-                    ft.Text(article["title"], size=fs(app, 18), weight=ft.FontWeight.BOLD),
-                    ft.Text(article.get("excerpt", ""), size=fs(app, 14), max_lines=3,
-                            overflow=ft.TextOverflow.ELLIPSIS, color=ft.Colors.ON_SURFACE_VARIANT),
-                    ft.Text(meta, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                ],
-                spacing=8,
-            ),
-        )
+def _article_row(article: dict, app) -> ft.Control:
+    meta = " · ".join(x for x in [(article.get("categories") or [""])[0], article.get("date")] if x)
+    return feed_row(
+        app,
+        article["title"],
+        meta=meta,
+        subtitle=article.get("excerpt"),
+        leading=thumb(article.get("image")),
+        on_click=lambda e: open_article(app, "science", article),
     )
-    return card(ft.Column(parts, spacing=0), padding=0, on_click=lambda e: open_reader(app, article))
 
 
 # ---------------------------------------------------------------- parsing

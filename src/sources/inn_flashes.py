@@ -7,7 +7,6 @@ Each API page holds 40 flashes (newest first); we keep reading pages until
 we pass the "hours back" limit from the settings.
 """
 
-import math
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -15,7 +14,7 @@ import flet as ft
 
 from core.source import Source
 from core.text import clean, html_to_text
-from ui.widgets import FAST, card, fs
+from ui.widgets import empty_message, feed_row, fs
 
 API = "https://www.inn.co.il/api/NewAPI/Cat"
 ISRAEL = ZoneInfo("Asia/Jerusalem")
@@ -66,7 +65,7 @@ class InnFlashes(Source):
 
     def render(self, flashes, app):
         if not flashes:
-            return card(ft.Text("אין מבזקים בטווח השעות שנבחר", color=ft.Colors.ON_SURFACE_VARIANT))
+            return empty_message(ft.Icons.NEWSPAPER_ROUNDED, "אין מבזקים בטווח השעות שנבחר")
 
         today = datetime.now(ISRAEL).date()
         rows: list[ft.Control] = []
@@ -77,8 +76,8 @@ class InnFlashes(Source):
                 label = "אתמול" if day == today - timedelta(days=1) else day.strftime("%d/%m")
                 rows.append(_day_divider(label))
                 last_day = day
-            rows.append(_flash_tile(flash, app))
-        return card(ft.Column(rows, spacing=0), padding=ft.Padding.symmetric(vertical=6), rtl=True)
+            rows.append(_flash_row(flash, app))
+        return ft.Column(rows, spacing=0, rtl=True)
 
 
 def _day_divider(label: str) -> ft.Control:
@@ -92,56 +91,32 @@ def _day_divider(label: str) -> ft.Control:
     )
 
 
-def _flash_tile(flash: dict, app) -> ft.Control:
-    """One headline. Tapping reveals the full text; the open/closed state is remembered."""
+def _flash_row(flash: dict, app) -> ft.Control:
+    """One headline (no images). Tapping reveals the full text; the open state is remembered."""
     expandable = bool(flash["body"]) and flash["body"].strip() != flash["title"].strip()
-    expanded = expandable and app.is_expanded("inn", flash["id"])
     is_new = app.is_new_since_last_visit(datetime.fromisoformat(flash["time"]).replace(tzinfo=ISRAEL))
 
-    time_label = ft.Column(
-        [
-            ft.Text(flash["time"][11:16], size=fs(app, 13), weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.PRIMARY),
-            ft.Container(width=8, height=8, border_radius=4, bgcolor=ft.Colors.RED_ACCENT_400,
-                         visible=is_new, tooltip="חדש מאז הביקור הקודם"),
-        ],
-        width=46,
-        spacing=4,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    meta = ft.Row(
+        [ft.Text(flash["time"][11:16], size=fs(app, 12), weight=ft.FontWeight.W_600, color=ft.Colors.PRIMARY),
+         ft.Container(width=7, height=7, border_radius=4, bgcolor=ft.Colors.RED_ACCENT_400,
+                      visible=is_new, tooltip="חדש מאז הביקור הקודם")],
+        spacing=6,
     )
-    title = ft.Text(flash["title"], size=fs(app, 16), weight=ft.FontWeight.W_600)
-    body = ft.Container(
-        visible=expanded,
-        padding=ft.Padding.only(top=6),
-        content=ft.Column(
+    details = None
+    if expandable:
+        details = ft.Column(
             [
-                ft.Text(flash["body"], size=fs(app, 15), color=ft.Colors.ON_SURFACE_VARIANT,
-                        selectable=True),
+                ft.Text(flash["body"], size=fs(app, 15), color=ft.Colors.ON_SURFACE_VARIANT, selectable=True),
                 ft.TextButton("לכתבה באתר", icon=ft.Icons.OPEN_IN_NEW_ROUNDED,
                               on_click=lambda e: app.open_url(flash["link"])),
             ],
             spacing=2,
-        ),
+        )
+    return feed_row(
+        app,
+        flash["title"],
+        meta=meta,
+        details=details,
+        expanded=expandable and app.is_expanded("inn", flash["id"]),
+        on_toggle=lambda is_open: app.set_expanded("inn", flash["id"], is_open),
     )
-    chevron = ft.Icon(ft.Icons.EXPAND_MORE_ROUNDED, size=22, color=ft.Colors.ON_SURFACE_VARIANT,
-                      rotate=math.pi if expanded else 0, animate_rotation=FAST, visible=expandable)
-
-    def toggle(e):
-        body.visible = not body.visible
-        chevron.rotate = math.pi if body.visible else 0
-        app.set_expanded("inn", flash["id"], body.visible)
-        tile.update()
-
-    tile = ft.Container(
-        content=ft.Row(
-            [time_label, ft.Column([title, body], spacing=0, expand=True), chevron],
-            vertical_alignment=ft.CrossAxisAlignment.START,
-            spacing=10,
-        ),
-        padding=ft.Padding.symmetric(horizontal=12, vertical=12),
-        ink=expandable,
-        on_click=toggle if expandable else None,
-        animate_size=FAST,
-        border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.4, ft.Colors.OUTLINE_VARIANT))),
-    )
-    return tile

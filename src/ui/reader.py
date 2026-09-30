@@ -1,5 +1,5 @@
 """
-Full-screen, distraction-free article reader.
+Distraction-free article reader. Opens INSIDE its category window (covering only it).
 Works with any source that provides {"title", "subtitle", "image", "blocks"}.
 """
 
@@ -15,47 +15,28 @@ if TYPE_CHECKING:
 MAX_WIDTH = 720  # comfortable line length on tablets
 
 
-def open_reader(app: "App", article: dict):
-    """article = list-card data; article["content"] may be missing (not downloaded yet)."""
-    body = ft.AnimatedSwitcher(content=skeleton(lines=8, with_image=True), duration=300)
-    view = ft.View(
-        route="/reader",
-        padding=0,
-        appbar=ft.AppBar(
-            title=ft.Text(article["title"], size=16, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-            actions=[
-                ft.IconButton(ft.Icons.OPEN_IN_NEW_ROUNDED, tooltip="Open on website",
-                              on_click=lambda e: app.open_url(article["url"])),
-            ],
-        ),
-        controls=[
-            ft.ListView(
-                [ft.Row([ft.Container(body, width=min(MAX_WIDTH, app.page.width or 400), padding=20)],
-                        alignment=ft.MainAxisAlignment.CENTER)],
-                expand=True,
-            )
-        ],
-    )
-    app.push_view(view)
-
+def open_article(app: "App", section_id: str, article: dict):
+    """article = list-row data; article["content"] may be missing (not downloaded yet)."""
+    section = app.sections[section_id]
+    actions = [ft.IconButton(ft.Icons.OPEN_IN_NEW_ROUNDED, tooltip="Open on website",
+                             on_click=lambda e: app.open_url(article["url"]))]
     if article.get("content"):
-        body.content = _article_body(app, article, article["content"])
-        view.update()
+        section.open_detail(article["title"], _article_body(app, article, article["content"]), actions)
     else:
-        app.page.run_task(_download_and_show, app, article, body, view)
+        section.open_detail(article["title"], skeleton(rows=8), actions)
+        app.page.run_task(_download_and_show, app, section, article)
 
 
-async def _download_and_show(app, article, body, view):
+async def _download_and_show(app, section, article):
     from sources.davidson_science import parse_article  # only needed here
 
     try:
         response = await app.client.get(article["url"])
         response.raise_for_status()
         article["content"] = parse_article(response.text)
-        body.content = _article_body(app, article, article["content"])
+        section.set_detail_content(_article_body(app, article, article["content"]))
     except Exception as ex:
-        body.content = ft.Text(f"Could not load the article: {ex}", color=ft.Colors.ERROR)
-    view.update()
+        section.set_detail_content(ft.Text(f"Could not load the article: {ex}", color=ft.Colors.ERROR))
 
 
 def _article_body(app, article: dict, content: dict) -> ft.Control:
@@ -64,8 +45,8 @@ def _article_body(app, article: dict, content: dict) -> ft.Control:
 
     if content.get("image"):
         parts.append(ft.Image(src=content["image"], border_radius=16, fit=ft.BoxFit.COVER,
-                              width=float("inf"), fade_in_animation=ft.Animation(300)))
-    parts.append(ft.Text(content.get("title") or article["title"], size=fs(app, 28),
+                              width=float("inf"), height=220, fade_in_animation=ft.Animation(300)))
+    parts.append(ft.Text(content.get("title") or article["title"], size=fs(app, 26),
                          weight=ft.FontWeight.BOLD, selectable=True))
     if content.get("subtitle"):
         parts.append(ft.Text(content["subtitle"], size=fs(app, 18),
@@ -96,4 +77,9 @@ def _article_body(app, article: dict, content: dict) -> ft.Control:
             ], spacing=6))
 
     parts.append(ft.Container(height=40))
-    return ft.Column(parts, spacing=14, rtl=True)
+    # centered column, never wider than MAX_WIDTH
+    return ft.Row(
+        [ft.Container(ft.Column(parts, spacing=14, rtl=True), width=MAX_WIDTH, expand_loose=True,
+                      padding=20)],
+        alignment=ft.MainAxisAlignment.CENTER,
+    )

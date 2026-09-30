@@ -59,6 +59,12 @@ def build_sidebar(app: "App", height: float | None = None) -> ft.Control:
         _nav_item(s.icon, s.title, s.color, jump(s.id)) for s in app.sources
     ]
 
+    async def refresh_all(e):
+        await app.refresh_all()
+
+    sources.append(ft.Container(height=8))
+    sources.append(_nav_item(ft.Icons.REFRESH_ROUNDED, "Refresh all", ft.Colors.PRIMARY, refresh_all))
+
     bottom = [
         ft.Divider(),
         _nav_item(

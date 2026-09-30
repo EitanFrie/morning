@@ -3,6 +3,8 @@ Small reusable design pieces, so every section looks like part of one app.
 Change the look of the whole app from here.
 """
 
+import math
+
 import flet as ft
 
 RADIUS = 18
@@ -108,30 +110,126 @@ class RoundButton(ft.Container):
         self.disabled = busy
 
 
-def skeleton(lines=4, with_image=False) -> ft.Control:
-    """Shimmering grey placeholder shown while a section loads for the first time."""
+def skeleton(rows=6, image=False) -> ft.Control:
+    """Shimmering placeholder rows (same shape as feed_row) shown while loading."""
 
     def bar(width=None, height=14):
         return ft.Container(
-            width=width, height=height, border_radius=8, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST
+            width=width, height=height, border_radius=7, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST
         )
 
-    rows = []
-    if with_image:
-        rows.append(bar(height=140))
-    widths = [None, 260, None, 180, 220, 140]
-    for i in range(lines):
-        rows.append(bar(widths[i % len(widths)]))
+    widths = [220, 160, 250, 190, 140, 230]
+    items = []
+    for i in range(rows):
+        parts = [ft.Container(width=THUMB, height=THUMB, border_radius=12,
+                              bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST)] if image else []
+        parts.append(ft.Column([bar(60, 10), bar(widths[i % len(widths)], 16)], spacing=8, expand=True))
+        items.append(ft.Container(ft.Row(parts, spacing=14), padding=ROW_PADDING))
     return ft.Shimmer(
-        content=card(ft.Column(rows, spacing=12)),
+        content=ft.Column(items, spacing=0),
         base_color=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         highlight_color=ft.Colors.SURFACE_CONTAINER_LOW,
         period=1300,
     )
 
 
+# ---------------------------------------------------------------- the one feed row
+
+THUMB = 52  # size of the image slots on both sides of a row
+ROW_PADDING = ft.Padding.symmetric(horizontal=16, vertical=12)
+
+
+def thumb(src: str | None, cover=True) -> ft.Control:
+    """An image for a row's side slot (article photo -> cover, team logo -> contain)."""
+    if not src:
+        return ft.Container(width=THUMB, height=THUMB)
+    return ft.Container(
+        ft.Image(src=src, width=THUMB, height=THUMB, fit=ft.BoxFit.COVER if cover else ft.BoxFit.CONTAIN,
+                 fade_in_animation=ft.Animation(250),
+                 error_content=ft.Icon(ft.Icons.IMAGE_NOT_SUPPORTED_OUTLINED, color=ft.Colors.OUTLINE)),
+        width=THUMB, height=THUMB, border_radius=12, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST if cover else None,
+    )
+
+
+def feed_row(
+    app,
+    title: str | list[ft.TextSpan],
+    *,
+    meta: ft.Control | str | None = None,
+    subtitle: str | None = None,
+    leading: ft.Control | None = None,
+    trailing: ft.Control | None = None,
+    on_click=None,
+    details: ft.Control | None = None,
+    expanded: bool = False,
+    on_toggle=None,
+    title_bold: bool = True,
+) -> ft.Control:
+    """
+    The single item format used by EVERY section:
+
+        [leading image]  meta line (time / status / category)   [trailing image]
+                         Headline
+                         subtitle (optional)
+
+    - on_click: open something (box score, article...)
+    - details:  extra content revealed under the row when tapped (news flashes);
+                on_toggle(is_open) lets the caller remember the state.
+    """
+    middle: list[ft.Control] = []
+    if meta is not None:
+        middle.append(meta if isinstance(meta, ft.Control) else
+                      ft.Text(meta, size=fs(app, 12), color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600))
+    # title: plain text, or a list of TextSpans for mixed styling (e.g. dimmed losing team)
+    spans = title if isinstance(title, list) else None
+    middle.append(ft.Text(None if spans else title, spans=spans, size=fs(app, 16), max_lines=2,
+                          overflow=ft.TextOverflow.ELLIPSIS,
+                          weight=ft.FontWeight.W_600 if title_bold else None))
+    if subtitle:
+        middle.append(ft.Text(subtitle, size=fs(app, 12.5), color=ft.Colors.ON_SURFACE_VARIANT,
+                              max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
+
+    row_parts: list[ft.Control] = []
+    if leading:
+        row_parts.append(leading)
+    row_parts.append(ft.Column(middle, spacing=3, expand=True))
+    if trailing:
+        row_parts.append(trailing)
+
+    chevron = None
+    if details is not None:
+        chevron = ft.Icon(ft.Icons.EXPAND_MORE_ROUNDED, size=20, color=ft.Colors.ON_SURFACE_VARIANT,
+                          rotate=math.pi if expanded else 0, animate_rotation=FAST)
+        row_parts.append(chevron)
+        details_box = ft.Container(details, visible=expanded, padding=ft.Padding.only(top=8))
+
+    content: list[ft.Control] = [ft.Row(row_parts, spacing=14, vertical_alignment=ft.CrossAxisAlignment.CENTER)]
+    if details is not None:
+        content.append(details_box)
+
+    box = ft.Container(
+        content=ft.Column(content, spacing=0),
+        padding=ROW_PADDING,
+        ink=bool(on_click or details is not None),
+        animate_size=FAST,
+        border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.45, ft.Colors.OUTLINE_VARIANT))),
+    )
+    if details is not None:
+        def toggle(e):
+            details_box.visible = not details_box.visible
+            chevron.rotate = math.pi if details_box.visible else 0
+            if on_toggle:
+                on_toggle(details_box.visible)
+            box.update()
+        box.on_click = toggle
+    elif on_click:
+        box.on_click = on_click
+    return box
+
+
 def error_box(message: str, on_retry) -> ft.Control:
-    return card(
+    return ft.Container(
         ft.Column(
             [
                 ft.Icon(ft.Icons.CLOUD_OFF_ROUNDED, size=36, color=ft.Colors.ERROR),
@@ -144,6 +242,17 @@ def error_box(message: str, on_retry) -> ft.Control:
             spacing=8,
         ),
         padding=24,
+        alignment=ft.Alignment.CENTER,
+    )
+
+
+def empty_message(icon, text: str) -> ft.Control:
+    return ft.Container(
+        ft.Column([ft.Icon(icon, size=36, color=ft.Colors.OUTLINE),
+                   ft.Text(text, color=ft.Colors.ON_SURFACE_VARIANT, text_align=ft.TextAlign.CENTER)],
+                  horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+        padding=40,
+        alignment=ft.Alignment.CENTER,
     )
 
 

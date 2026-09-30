@@ -2,7 +2,8 @@
 The app controller: owns settings/cache, builds the layout, and refreshes sources.
 
 Layout:
-  wide screens (tablet)  -> sidebar always visible on the left + feed
+  every category is a full-screen "window"; windows are stacked vertically and snap.
+  wide screens (tablet)  -> sidebar always visible on the left
   narrow screens (phone) -> top bar with a menu button that opens the sidebar
 """
 
@@ -20,10 +21,8 @@ from ui.section import Section
 from ui.settings import open_settings
 from ui.sidebar import build_sidebar
 
-WIDE_SCREEN = 900      # px: from here on the sidebar is always shown
-MAX_FEED_WIDTH = 1000  # px: keep lines readable on big tablets
-FEED_TOP = 4
-FEED_SPACING = 26
+WIDE_SCREEN = 900  # px: from here on the sidebar is always shown
+GUTTER = 30        # px: empty strip beside the windows, for scrolling between them
 
 THEMES = {"system": ft.ThemeMode.SYSTEM, "light": ft.ThemeMode.LIGHT, "dark": ft.ThemeMode.DARK}
 
@@ -45,7 +44,8 @@ class App:
         self.sources: list[Source] = create_sources()
         self.sections = {s.id: Section(s, self) for s in self.sources}
         self.wide: bool | None = None
-        self.feed: ft.Column | None = None
+        self.current = 0        # index of the window on screen
+        self._last_move = 0.0
 
     # ------------------------------------------------------------ startup
 
@@ -60,6 +60,7 @@ class App:
         page.theme_mode = THEMES.get(self.settings["theme"], ft.ThemeMode.SYSTEM)
         page.on_resize = self._on_resize
         page.on_view_pop = self._on_view_pop
+        page.views[0].on_confirm_pop = self._on_back
         page.on_app_lifecycle_state_change = self._on_lifecycle
 
         for section in self.sections.values():
@@ -77,115 +78,125 @@ class App:
         return self.page.width or 400
 
     def _build_layout(self):
+        """Every category is one full-screen window; the windows are stacked vertically
+        and snap into place (a vertical PageView)."""
         page = self.page
         self.wide = self._page_width() >= WIDE_SCREEN
-        self.greeting = self._greeting()
-        # Remember every block's rendered height, so the sidebar can compute where
-        # each section starts and scroll there.
-        self.heights: dict[str, float] = {}
-        blocks = [("_greeting", self.greeting)] + [(sid, s.control) for sid, s in self.sections.items()]
-        for block_id, control in blocks:
-            control.on_size_change = self._remember_height(block_id)
-        self.feed = ft.Column(
-            [ft.Container(height=FEED_TOP)]
-            + [control for _, control in blocks]
-            + [ft.Container(height=40)],
-            spacing=FEED_SPACING,
+        self.pager = ft.PageView(
+            controls=[self._window_page(s) for s in self.sections.values()],
+            horizontal=False,
+            selected_index=self.current,
+            on_change=self._on_page_change,
             expand=True,
-            scroll=ft.ScrollMode.AUTO,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        self._apply_feed_width()
+        # Position dots in the empty strip on the side (tap one to jump there).
+        self.dots = ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True)
+        self._update_dots()
+        feed = ft.Stack(
+            [self.pager, ft.Container(self.dots, padding=ft.Padding.only(right=4))],
+            alignment=ft.Alignment.CENTER_RIGHT,
+            expand=True,
+        )
+
         page.controls.clear()
         if self.wide:
             page.appbar = None
             page.drawer = None
             page.controls.append(
-                ft.Row([build_sidebar(self), ft.VerticalDivider(width=1), self.feed], expand=True, spacing=0)
+                ft.Row([build_sidebar(self), ft.VerticalDivider(width=1), feed], expand=True, spacing=0)
             )
         else:
             page.appbar = ft.AppBar(
                 leading=ft.IconButton(ft.Icons.MENU_ROUNDED, on_click=self._open_drawer),
                 title=ft.Text("Morning", weight=ft.FontWeight.BOLD),
-                actions=[ft.IconButton(ft.Icons.SETTINGS_ROUNDED, on_click=lambda e: self.open_settings())],
+                actions=[
+                    ft.IconButton(ft.Icons.REFRESH_ROUNDED, tooltip="Refresh all", on_click=self._refresh_all_click),
+                    ft.IconButton(ft.Icons.SETTINGS_ROUNDED, on_click=lambda e: self.open_settings()),
+                ],
             )
             page.drawer = ft.NavigationDrawer(controls=[build_sidebar(self, height=page.height)])
-            page.controls.append(self.feed)
+            page.controls.append(feed)
 
-    def _apply_feed_width(self):
-        """Centered feed: full width on phones, at most MAX_FEED_WIDTH on big screens."""
-        available = self._page_width() - (272 if self.wide else 0)
-        width = min(available - 32, MAX_FEED_WIDTH)
-        self.greeting.width = width
-        for section in self.sections.values():
-            section.control.width = width
-
-    def _greeting(self) -> ft.Control:
-        hour = datetime.now().hour
-        hello = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
-
-        async def refresh_all(e):
-            await self.refresh_all()
-
+    def _window_page(self, section: Section) -> ft.Control:
+        # The empty strip on the side (GUTTER) belongs to the pager, not to the
+        # window: dragging there always moves between categories.
         return ft.Container(
-            content=ft.Row(
-                [
-                    ft.Column([
-                        ft.Text(hello, size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                        ft.Text(datetime.now().strftime("%A, %d %B %Y"), size=14,
-                                color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
-                    ], spacing=2, expand=True),
-                    ft.FilledButton(
-                        "Refresh all",
-                        icon=ft.Icons.REFRESH_ROUNDED,
-                        on_click=refresh_all,
-                        style=ft.ButtonStyle(
-                            bgcolor=ft.Colors.with_opacity(0.22, ft.Colors.WHITE),
-                            color=ft.Colors.WHITE,
-                            shape=ft.RoundedRectangleBorder(radius=14),
-                            padding=ft.Padding.symmetric(horizontal=16, vertical=14),
-                        ),
-                    ),
-                ],
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            padding=22,
-            border_radius=24,
-            gradient=ft.LinearGradient(
-                begin=ft.Alignment.TOP_LEFT,
-                end=ft.Alignment.BOTTOM_RIGHT,
-                colors=[ft.Colors.INDIGO_400, ft.Colors.DEEP_PURPLE_400, ft.Colors.PINK_300],
-            ),
+            section.window,
+            padding=ft.Padding.only(left=10, top=10, bottom=10, right=GUTTER),
         )
+
+    def _update_dots(self):
+        def dot(i, section):
+            active = i == self.current
+
+            async def go(e):
+                await self.go_to(i)
+
+            return ft.Container(
+                ft.Container(width=8, height=26 if active else 8, border_radius=4,
+                             bgcolor=section.source.color if active else ft.Colors.OUTLINE_VARIANT,
+                             animate=ft.Animation(250, ft.AnimationCurve.EASE_OUT)),
+                padding=ft.Padding.symmetric(horizontal=6, vertical=4),
+                on_click=go,
+                tooltip=section.source.title,
+            )
+
+        self.dots.controls = [dot(i, s) for i, s in enumerate(self.sections.values())]
 
     async def _on_resize(self, e):
         if (self._page_width() >= WIDE_SCREEN) != self.wide:
             self._build_layout()
-        else:
-            self._apply_feed_width()
-            if self.page.drawer:
-                self.page.drawer.controls = [build_sidebar(self, height=self.page.height)]
+        elif self.page.drawer:
+            self.page.drawer.controls = [build_sidebar(self, height=self.page.height)]
         self.page.update()
 
     async def _open_drawer(self, e):
         await self.page.show_drawer()
 
-    def _remember_height(self, block_id: str):
-        def handler(e):
-            self.heights[block_id] = e.height
-        return handler
+    async def _refresh_all_click(self, e):
+        await self.refresh_all()
+
+    # ------------------------------------------------------------ moving between windows
+
+    async def go_to(self, index: int):
+        index = max(0, min(index, len(self.sources) - 1))
+        if index == self.current:
+            return
+        self.current = index
+        self._update_dots()
+        self.page.update()
+        await self.pager.go_to_page(index, animation_duration=ft.Duration(milliseconds=450),
+                                    animation_curve=ft.AnimationCurve.EASE_IN_OUT_CUBIC)
+
+    async def move_window(self, source_id: str, direction: int):
+        """Called when a window is scrolled past its end: go to the next/previous one."""
+        index = list(self.sections).index(source_id)
+        # Only the window on screen may switch, and only once per gesture - otherwise the
+        # leftover momentum would carry on through the next window too.
+        if index != self.current or time.monotonic() - self._last_move < 1.2:
+            return
+        self._last_move = time.monotonic()
+        await self.go_to(index + direction)
+
+    async def _on_page_change(self, e):
+        self.current = e.control.selected_index
+        self._last_move = time.monotonic()
+        self._update_dots()
+        self.page.update()
 
     async def jump_to(self, source_id: str):
         if not self.wide:
             await self.page.close_drawer()
-        # Section start = top padding + heights of everything above it (+ spacing).
-        offset = FEED_TOP + FEED_SPACING + self.heights.get("_greeting", 0) + FEED_SPACING
-        for sid in self.sections:
-            if sid == source_id:
-                break
-            offset += self.heights.get(sid, 0) + FEED_SPACING
-        await self.feed.scroll_to(offset=max(0, offset - 8), duration=500,
-                                  curve=ft.AnimationCurve.EASE_IN_OUT)
+        await self.go_to(list(self.sections).index(source_id))
+
+    async def _on_back(self, e):
+        """Android back button: close an open box score / article first."""
+        section = list(self.sections.values())[self.current]
+        if section.detail_open:
+            section.close_detail()
+            await e.control.confirm_pop(False)
+        else:
+            await e.control.confirm_pop(True)
 
     # ------------------------------------------------------------ refreshing
 

@@ -3,6 +3,14 @@
 A personal morning news feed for Android phone & tablet, written in Python with [Flet](https://flet.dev).
 No server: the app itself downloads and cleans up the sites.
 
+**How it feels:** every category is its own full-screen window. Windows are stacked
+vertically and snap into place. Scrolling inside a window scrolls only that category;
+keep pulling past its top/bottom (or drag the empty strip on the right side) to move to
+the previous/next window. A box score or article opens *inside* its own window only,
+so you can leave it open, visit the other categories, and come back to it.
+Every item in every category uses the same row format:
+`[image] meta line / headline / subtitle [image]`.
+
 | Section | Source | How |
 |---|---|---|
 | **מבזקים** | inn.co.il/flashes | The site's own JSON API — last N hours (setting), tap a headline to expand (remembered) |
@@ -44,8 +52,8 @@ src/
     nba.py                scores + box scores
     davidson_science.py   science articles
   ui/
-    widgets.py            shared design (cards, pills, buttons, skeleton loaders)
-    section.py            section header + refresh button + loading states
+    widgets.py            shared design - feed_row() is the one item format for all sections
+    section.py            one category window: header, own scrolling, detail layer
     sidebar.py, settings.py, reader.py, boxscore.py
 ```
 

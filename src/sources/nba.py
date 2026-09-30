@@ -19,7 +19,7 @@ import flet as ft
 from core.http import next_data
 from core.source import Source
 from ui.boxscore import open_box_score
-from ui.widgets import card, fs, pill
+from ui.widgets import empty_message, feed_row, fs, thumb
 
 BASE = "https://www.nba.com"
 NEW_YORK = ZoneInfo("America/New_York")
@@ -100,16 +100,11 @@ class NbaScores(Source):
         games = data["games"]
         if not games:
             day = date.fromisoformat(data["day"]).strftime("%A, %d %B")
-            return card(ft.Row([ft.Icon(ft.Icons.EVENT_BUSY_ROUNDED, color=ft.Colors.ON_SURFACE_VARIANT),
-                                ft.Text(f"No games on {day}", color=ft.Colors.ON_SURFACE_VARIANT)]))
+            return empty_message(ft.Icons.EVENT_BUSY_ROUNDED, f"No games on {day}")
         # live games first, then upcoming, then finished
         order = {LIVE: 0, SCHEDULED: 1, FINAL: 2}
         games = sorted(games, key=lambda g: order.get(g["status"], 3))
-        return ft.ResponsiveRow(
-            [ft.Container(_game_card(g, app), col={"xs": 12, "md": 6, "xl": 4}) for g in games],
-            spacing=14,
-            run_spacing=14,
-        )
+        return ft.Column([_game_row(g, app) for g in games], spacing=0)
 
 
 # ---------------------------------------------------------------- parsing
@@ -122,7 +117,24 @@ def _team_from_card(team: dict) -> dict:
         "score": team.get("score", 0),
         "record": team.get("teamSubtitle", ""),
         "periods": [p.get("score", 0) for p in team.get("periods") or []],
+        "id": team.get("teamId"),
+        "leader": _leader(team.get("teamLeader") or {}),
     }
+
+
+def _leader(leader: dict) -> str:
+    if not leader.get("name") or str(leader.get("points", "0")) == "0":
+        return ""
+    return f'{leader["name"].split(" ")[-1]} {leader["points"]}'
+
+
+# ESPN serves small team logos; a few of its team codes differ from the NBA's.
+ESPN_CODES = {"GSW": "gs", "NOP": "no", "NYK": "ny", "SAS": "sa", "UTA": "utah", "WAS": "wsh"}
+
+
+def logo_url(code: str) -> str:
+    espn = ESPN_CODES.get(code, code.lower())
+    return f"https://a.espncdn.com/combiner/i?img=/i/teamlogos/nba/500/{espn}.png&w=96&h=96"
 
 
 def _game_from_card(c: dict) -> dict:
@@ -187,7 +199,7 @@ async def _fetch_box_score(app, game_id: str) -> dict:
 
 def _live_dot() -> ft.Control:
     """A softly pulsing red dot for live games."""
-    dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=ft.Colors.RED_ACCENT_400,
+    dot = ft.Container(width=7, height=7, border_radius=4, bgcolor=ft.Colors.RED_ACCENT_400,
                        animate_opacity=900)
 
     def pulse(e):
@@ -199,64 +211,52 @@ def _live_dot() -> ft.Control:
     return dot
 
 
-def _status_pill(game: dict, app) -> ft.Control:
+def _meta(game: dict, app) -> ft.Control:
+    """Status line: LIVE Q3 5:21 / Final / tip-off time, plus game info."""
+    size = fs(app, 12)
     if game["status"] == LIVE:
-        return ft.Container(
-            ft.Row([_live_dot(), ft.Text(game["status_text"] or "LIVE", size=12,
-                                         weight=ft.FontWeight.W_600, color=ft.Colors.RED_ACCENT_400)],
-                   spacing=6, tight=True),
-            padding=ft.Padding.symmetric(horizontal=10, vertical=4), border_radius=50,
-            bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.RED_ACCENT_400),
-        )
-    if game["status"] == FINAL:
-        return pill(game["status_text"] or "Final", ft.Colors.ON_SURFACE_VARIANT)
-    # scheduled: show tip-off in the phone's timezone setting
-    text = game["status_text"]
-    if game.get("time_utc"):
-        tip = datetime.fromisoformat(game["time_utc"].replace("Z", "+00:00"))
-        text = tip.astimezone(ZoneInfo(app.settings["timezone"])).strftime("%H:%M")
-    return pill(text, ft.Colors.PRIMARY, icon=ft.Icons.SCHEDULE_ROUNDED)
+        parts = [_live_dot(), ft.Text(game["status_text"] or "LIVE", size=size, weight=ft.FontWeight.W_600,
+                                      color=ft.Colors.RED_ACCENT_400)]
+    elif game["status"] == FINAL:
+        parts = [ft.Text(game["status_text"] or "Final", size=size, weight=ft.FontWeight.W_600,
+                         color=ft.Colors.ON_SURFACE_VARIANT)]
+    else:  # scheduled: tip-off in your timezone
+        text = game["status_text"]
+        if game.get("time_utc"):
+            tip = datetime.fromisoformat(game["time_utc"].replace("Z", "+00:00"))
+            text = tip.astimezone(ZoneInfo(app.settings["timezone"])).strftime("%H:%M")
+        parts = [ft.Text(text, size=size, weight=ft.FontWeight.W_600, color=ft.Colors.PRIMARY)]
+    if game["info"]:
+        parts.append(ft.Text("· " + game["info"], size=size, color=ft.Colors.ON_SURFACE_VARIANT,
+                             max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True))
+    return ft.Row(parts, spacing=6)
 
 
-def _team_row(team: dict, dim: bool, app) -> ft.Control:
-    return ft.Row(
-        [
-            ft.Container(
-                ft.Text(team["code"], size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.ON_PRIMARY_CONTAINER),
-                width=44, height=32, border_radius=10, alignment=ft.Alignment.CENTER,
-                bgcolor=ft.Colors.PRIMARY_CONTAINER,
-            ),
-            ft.Column([
-                ft.Text(team["name"], size=fs(app, 16), weight=ft.FontWeight.W_600),
-                ft.Text(team["record"], size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-            ], spacing=0, expand=True),
-            ft.Text(str(team["score"]), size=fs(app, 26), weight=ft.FontWeight.BOLD),
-        ],
-        spacing=12,
-        opacity=0.5 if dim else 1,
-    )
-
-
-def _game_card(game: dict, app) -> ft.Control:
+def _game_row(game: dict, app) -> ft.Control:
+    """Away logo | Pistons 118 - 100 Hornets | home logo  (the loser is dimmed when final)."""
     away, home = game["away"], game["home"]
     final = game["status"] == FINAL
     started = game["status"] != SCHEDULED
-    footer = ft.Row(
-        [ft.Text("Box score", size=12, color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600),
-         ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, size=16, color=ft.Colors.PRIMARY)],
-        spacing=2, alignment=ft.MainAxisAlignment.END, visible=bool(game.get("box")),
+
+    def team_span(team, other):
+        lost = final and team["score"] < other["score"]
+        return ft.TextSpan(team["name"], ft.TextStyle(
+            color=ft.Colors.ON_SURFACE_VARIANT if lost else None,
+            weight=ft.FontWeight.W_500 if lost else ft.FontWeight.BOLD))
+
+    if started:
+        title = [team_span(away, home), ft.TextSpan(f'  {away["score"]} – {home["score"]}  '), team_span(home, away)]
+    else:
+        title = [team_span(away, home), ft.TextSpan("  @  "), team_span(home, away)]
+
+    leaders = " · ".join(x for x in [away["leader"], home["leader"]] if x)
+    subtitle = leaders or f'{away["record"]} · {home["record"]}'
+    return feed_row(
+        app,
+        title,
+        meta=_meta(game, app),
+        subtitle=subtitle,
+        leading=thumb(logo_url(away["code"]), cover=False),
+        trailing=thumb(logo_url(home["code"]), cover=False),
+        on_click=(lambda e: open_box_score(app, "nba", game)) if started and game.get("box") else None,
     )
-    content = ft.Column(
-        [
-            ft.Row([_status_pill(game, app),
-                    ft.Text(game["info"], size=11, color=ft.Colors.ON_SURFACE_VARIANT,
-                            max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True,
-                            text_align=ft.TextAlign.END)]),
-            _team_row(away, final and away["score"] < home["score"], app),
-            _team_row(home, final and home["score"] < away["score"], app),
-            footer,
-        ],
-        spacing=10,
-    )
-    on_click = (lambda e: open_box_score(app, game)) if started and game.get("box") else None
-    return card(content, on_click=on_click)

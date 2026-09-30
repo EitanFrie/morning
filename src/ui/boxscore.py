@@ -1,10 +1,10 @@
-"""Box score screen: score header, line score, then each team's table (away above home)."""
+"""Box score: score header, line score, then each team's table (away above home)."""
 
 from typing import TYPE_CHECKING
 
 import flet as ft
 
-from ui.widgets import card, fs
+from ui.widgets import card, fs, thumb
 
 if TYPE_CHECKING:
     from app import App
@@ -15,39 +15,34 @@ COLUMNS = [  # (header, key in the player dict)
 ]
 
 
-def open_box_score(app: "App", game: dict):
+def open_box_score(app: "App", section_id: str, game: dict):
+    """Opens inside the NBA window only - the other categories stay as they are."""
     box = game["box"]
     away, home = game["away"], game["home"]
-    view = ft.View(
-        route="/boxscore",
-        padding=0,
-        appbar=ft.AppBar(title=ft.Text(f'{away["code"]} @ {home["code"]}')),
-        controls=[
-            ft.ListView(
-                [
-                    _score_header(game, app),
-                    _line_score(game),
-                    _team_table(box["away"], app),
-                    _team_table(box["home"], app),
-                    ft.Container(height=30),
-                ],
-                padding=16,
-                spacing=18,
-                expand=True,
-            )
+    content = ft.Column(
+        [
+            _score_header(game, app),
+            _line_score(game),
+            _team_table(box["away"], app),
+            _team_table(box["home"], app),
+            ft.Container(height=30),
         ],
+        spacing=18,
     )
-    app.push_view(view)
+    app.sections[section_id].open_detail(
+        f'{away["name"]} @ {home["name"]}', ft.Container(content, padding=14)
+    )
 
 
 def _score_header(game: dict, app) -> ft.Control:
+    from sources.nba import logo_url  # local import: sources.nba imports this module
+
     away, home = game["away"], game["home"]
 
     def side(team):
         return ft.Column(
             [
-                ft.Text(team["code"], size=fs(app, 15), weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.ON_SURFACE_VARIANT),
+                thumb(logo_url(team["code"]), cover=False),
                 ft.Text(str(team["score"]), size=fs(app, 40), weight=ft.FontWeight.BOLD),
                 ft.Text(team["name"], size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ],
