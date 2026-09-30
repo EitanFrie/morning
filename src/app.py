@@ -22,6 +22,7 @@ from ui.settings import open_settings
 from ui.sidebar import build_sidebar
 
 WIDE_SCREEN = 900  # px: from here on the sidebar is always shown
+WINDOW_TRANSITION_MS = 850  # slow, gentle glide between categories
 GUTTER = 30        # px: empty strip beside the windows, for scrolling between them
 
 THEMES = {"system": ft.ThemeMode.SYSTEM, "light": ft.ThemeMode.LIGHT, "dark": ft.ThemeMode.DARK}
@@ -165,7 +166,7 @@ class App:
         self.current = index
         self._update_dots()
         self.page.update()
-        await self.pager.go_to_page(index, animation_duration=ft.Duration(milliseconds=450),
+        await self.pager.go_to_page(index, animation_duration=ft.Duration(milliseconds=WINDOW_TRANSITION_MS),
                                     animation_curve=ft.AnimationCurve.EASE_IN_OUT_CUBIC)
 
     async def move_window(self, source_id: str, direction: int):
@@ -173,7 +174,7 @@ class App:
         index = list(self.sections).index(source_id)
         # Only the window on screen may switch, and only once per gesture - otherwise the
         # leftover momentum would carry on through the next window too.
-        if index != self.current or time.monotonic() - self._last_move < 1.2:
+        if index != self.current or time.monotonic() - self._last_move < 1.5:
             return
         self._last_move = time.monotonic()
         await self.go_to(index + direction)

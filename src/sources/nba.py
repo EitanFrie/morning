@@ -228,8 +228,8 @@ def _meta(game: dict, app) -> ft.Control:
         parts = [ft.Text(text, size=size, weight=ft.FontWeight.W_600, color=ft.Colors.PRIMARY)]
     if game["info"]:
         parts.append(ft.Text("· " + game["info"], size=size, color=ft.Colors.ON_SURFACE_VARIANT,
-                             max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True))
-    return ft.Row(parts, spacing=6)
+                             max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
+    return ft.Row(parts, spacing=6, tight=True)
 
 
 def _game_row(game: dict, app) -> ft.Control:
@@ -258,5 +258,6 @@ def _game_row(game: dict, app) -> ft.Control:
         subtitle=subtitle,
         leading=thumb(logo_url(away["code"]), cover=False),
         trailing=thumb(logo_url(home["code"]), cover=False),
+        center=True,
         on_click=(lambda e: open_box_score(app, "nba", game)) if started and game.get("box") else None,
     )

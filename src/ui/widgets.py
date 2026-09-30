@@ -165,6 +165,7 @@ def feed_row(
     expanded: bool = False,
     on_toggle=None,
     title_bold: bool = True,
+    center: bool = False,
 ) -> ft.Control:
     """
     The single item format used by EVERY section:
@@ -178,22 +179,24 @@ def feed_row(
                 on_toggle(is_open) lets the caller remember the state.
     """
     middle: list[ft.Control] = []
+    align = ft.TextAlign.CENTER if center else None  # center=True: centered text (NBA)
     if meta is not None:
         middle.append(meta if isinstance(meta, ft.Control) else
-                      ft.Text(meta, size=fs(app, 12), color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600))
+                      ft.Text(meta, text_align=align, size=fs(app, 12), color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600))
     # title: plain text, or a list of TextSpans for mixed styling (e.g. dimmed losing team)
     spans = title if isinstance(title, list) else None
-    middle.append(ft.Text(None if spans else title, spans=spans, size=fs(app, 16), max_lines=2,
+    middle.append(ft.Text(None if spans else title, spans=spans, size=fs(app, 16), max_lines=2, text_align=align,
                           overflow=ft.TextOverflow.ELLIPSIS,
                           weight=ft.FontWeight.W_600 if title_bold else None))
     if subtitle:
-        middle.append(ft.Text(subtitle, size=fs(app, 12.5), color=ft.Colors.ON_SURFACE_VARIANT,
+        middle.append(ft.Text(subtitle, text_align=align, size=fs(app, 12.5), color=ft.Colors.ON_SURFACE_VARIANT,
                               max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
 
     row_parts: list[ft.Control] = []
     if leading:
         row_parts.append(leading)
-    row_parts.append(ft.Column(middle, spacing=3, expand=True))
+    row_parts.append(ft.Column(middle, spacing=3, expand=True,
+                               horizontal_alignment=ft.CrossAxisAlignment.CENTER if center else None))
     if trailing:
         row_parts.append(trailing)
 
