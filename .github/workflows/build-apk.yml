@@ -34,14 +34,30 @@ jobs:
         run: pip install "flet[all]==1.0.3"
 
       - name: Build APK
+        env:
+          # One fixed signing key (GitHub secrets) -> every new APK installs over the old one.
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then VERSION="0.0.${GITHUB_RUN_NUMBER}"; fi
           echo "$VERSION" > src/version.txt   # the app reads this to check for updates
+          SIGNING=()
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/morning.p12"
+            SIGNING=(--android-signing-key-store "$RUNNER_TEMP/morning.p12"
+                     --android-signing-key-store-password "$KEYSTORE_PASSWORD"
+                     --android-signing-key-password "$KEYSTORE_PASSWORD"
+                     --android-signing-key-alias "$KEY_ALIAS")
+          else
+            echo "::warning::No signing secrets - APK signed with a temporary key"
+          fi
           # arm64 only: every modern phone/tablet, and a much smaller APK
           flet build apk --yes --arch arm64-v8a \
             --android-permissions android.permission.INTERNET=True \
-            --build-version "$VERSION" --build-number "$GITHUB_RUN_NUMBER"
+            --build-version "$VERSION" --build-number "$GITHUB_RUN_NUMBER" \
+            "${SIGNING[@]}"
 
       - uses: actions/upload-artifact@v4
         with:
