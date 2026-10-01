@@ -29,9 +29,8 @@ Still to do / check:
 - Aliyah crossing chapters (e.g. "Exodus 11:4-12:20"): mapping code exists, untested this week.
 - If the download is interrupted halfway, it simply starts over next time (nothing partial is saved).
 
-## Fixed APK signing key  (NEEDED for the in-app update check to install smoothly)
-Each CI build currently signs with a throwaway key, so a new APK may refuse to install over
-the old one ("App not installed") → you'd have to uninstall first (losing settings/cache).
-Fix: generate one keystore (`keytool -genkey ...`), store it base64 in a GitHub secret,
-decode it in `build-apk.yml` and pass it to `flet build apk` (`--android-signing-key-store`,
-`--android-signing-key-alias`, passwords via env/secrets).
+## Fixed APK signing key — key created, waiting for the 3 GitHub secrets
+Key: C:\Users\Eitan\morning-signing\morning.p12 (NOT in the repo — back it up! Losing it means
+uninstalling the app to update). Values to paste: GITHUB_SECRETS.txt in the same folder.
+build-apk.yml already uses ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS
+(without them it warns and falls back to a temporary key).
