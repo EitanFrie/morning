@@ -77,9 +77,9 @@ def _article_body(app, article: dict, content: dict) -> ft.Control:
             ], spacing=6))
 
     parts.append(ft.Container(height=40))
-    # centered column, never wider than MAX_WIDTH
+    # Fit the window: full window width on a phone, at most MAX_WIDTH on a tablet.
+    width = min(MAX_WIDTH, app.window_width() - 8)
     return ft.Row(
-        [ft.Container(ft.Column(parts, spacing=14, rtl=True), width=MAX_WIDTH, expand_loose=True,
-                      padding=20)],
+        [ft.Container(ft.Column(parts, spacing=14, rtl=True), width=width, padding=16)],
         alignment=ft.MainAxisAlignment.CENTER,
     )

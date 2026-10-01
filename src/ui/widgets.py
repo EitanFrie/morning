@@ -270,3 +270,33 @@ def time_ago(minutes: float | None) -> str:
     if minutes < 60 * 24:
         return f"Updated {int(minutes // 60)} h ago"
     return f"Updated {int(minutes // (60 * 24))} days ago"
+
+
+def picker(label: str, options: list[tuple[str, str]], on_pick, width=None, expand=None,
+           rtl=True) -> ft.Control:
+    """A compact dropdown whose label always shows its FIRST letters (long names fade out
+    with "…" at the end instead of being scrolled). options = [(key, text)];
+    on_pick(key) is called (may be async)."""
+    async def choose(key):
+        result = on_pick(key)
+        if hasattr(result, "__await__"):
+            await result
+
+    def item(key, text):
+        async def click(e):
+            await choose(key)
+        return ft.PopupMenuItem(content=ft.Text(text, rtl=rtl), on_click=click)
+
+    box = ft.Container(
+        ft.Row(
+            [ft.Text(label, size=14, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True),
+             ft.Icon(ft.Icons.ARROW_DROP_DOWN_ROUNDED, color=ft.Colors.ON_SURFACE_VARIANT)],
+            spacing=4, rtl=rtl,
+        ),
+        height=40,
+        padding=ft.Padding.only(left=8, right=12),
+        border=ft.Border.all(1, ft.Colors.OUTLINE),
+        border_radius=10,
+    )
+    return ft.PopupMenuButton(content=box, items=[item(k, t) for k, t in options],
+                              width=width, expand=expand, menu_position=ft.PopupMenuPosition.UNDER)

@@ -23,7 +23,7 @@ from ui.sidebar import build_sidebar
 
 WIDE_SCREEN = 900  # px: from here on the sidebar is always shown
 WINDOW_TRANSITION_MS = 850  # slow, gentle glide between categories
-GUTTER = 30        # px: empty strip beside the windows, for scrolling between them
+GUTTER = 45        # px: empty strip beside the windows, for scrolling between them
 
 THEMES = {"system": ft.ThemeMode.SYSTEM, "light": ft.ThemeMode.LIGHT, "dark": ft.ThemeMode.DARK}
 
@@ -65,7 +65,7 @@ class App:
         page.on_app_lifecycle_state_change = self._on_lifecycle
 
         for section in self.sections.values():
-            section.extras.controls = section.source.header_extras(self)
+            section._set_extras()
             section.show_cached()  # instant: show yesterday's data while loading
         self._build_layout()
         page.update()
@@ -77,6 +77,11 @@ class App:
 
     def _page_width(self) -> float:
         return self.page.width or 400
+
+    def window_width(self) -> float:
+        """Inner width of a category window (page minus sidebar, margins and side strip)."""
+        sidebar = 272 if self._page_width() >= WIDE_SCREEN else 0
+        return self._page_width() - sidebar - 10 - GUTTER - 2
 
     def _build_layout(self):
         """Every category is one full-screen window; the windows are stacked vertically
@@ -134,10 +139,10 @@ class App:
                 await self.go_to(i)
 
             return ft.Container(
-                ft.Container(width=8, height=26 if active else 8, border_radius=4,
+                ft.Container(width=10, height=30 if active else 10, border_radius=5,
                              bgcolor=section.source.color if active else ft.Colors.OUTLINE_VARIANT,
                              animate=ft.Animation(250, ft.AnimationCurve.EASE_OUT)),
-                padding=ft.Padding.symmetric(horizontal=6, vertical=4),
+                padding=ft.Padding.symmetric(horizontal=12, vertical=5),
                 on_click=go,
                 tooltip=section.source.title,
             )

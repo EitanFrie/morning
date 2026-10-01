@@ -37,24 +37,32 @@ class Section:
         self._pull = 0.0  # accumulated overscroll of the current gesture
 
         # ---- header ----
-        self.status = ft.Text(size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+        self.status = ft.Text(size=12, color=ft.Colors.ON_SURFACE_VARIANT, max_lines=1,
+                              overflow=ft.TextOverflow.ELLIPSIS, text_align=ft.TextAlign.CENTER)
         self.title = ft.Text(source.title, size=fs(app, 20), weight=ft.FontWeight.BOLD,
+                             text_align=ft.TextAlign.CENTER,
                              max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
         self.back_button = ft.IconButton(ft.Icons.ARROW_BACK_ROUNDED, visible=False, tooltip="Back",
                                          on_click=lambda e: self.close_detail())
         self.badge = icon_badge(source.icon, source.color)
-        self.extras = ft.Row(spacing=0, tight=True)
+        self.extras = ft.Row(spacing=8, alignment=ft.MainAxisAlignment.CENTER, visible=False)
         self.detail_actions = ft.Row(spacing=0, tight=True, visible=False)
         self.refresh_button = RoundButton(ft.Icons.REFRESH_ROUNDED, on_click=self._on_refresh_click,
                                           tooltip="Refresh")
+        # Two lines: [badge | centered title + status | actions], then the
+        # section's own pickers (dates, commentator...) centered underneath.
         header = ft.Container(
-            ft.Row(
-                [self.back_button, self.badge,
-                 ft.Column([self.title, self.status], spacing=0, expand=True),
-                 self.extras, self.detail_actions, self.refresh_button],
-                spacing=10,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
+            ft.Column([
+                ft.Row(
+                    [self.back_button, self.badge,
+                     ft.Column([self.title, self.status], spacing=0, expand=True,
+                               horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                     self.detail_actions, self.refresh_button],
+                    spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                self.extras,
+            ], spacing=8),
             padding=ft.Padding.only(left=14, right=12, top=12, bottom=10),
         )
         self.progress = ft.ProgressBar(height=2, visible=False)
@@ -137,13 +145,17 @@ class Section:
         self.detail_open = False
         self.back_button.visible = False
         self.badge.visible = True
-        self.extras.visible = True
+        self.extras.visible = bool(self.extras.controls)
         self.detail_actions.visible = False
         self.title.value = self.source.title
         self.update_status()
         self.app.page.update()
 
     # ---------------------------------------------------------------- state
+
+    def _set_extras(self):
+        self.extras.controls = self.source.header_extras(self.app)
+        self.extras.visible = bool(self.extras.controls) and not self.detail_open
 
     def show_cached(self):
         """Render whatever is in the cache (instant, works offline)."""
@@ -154,12 +166,12 @@ class Section:
 
     def rerender(self):
         self.title.size = fs(self.app, 20)
-        self.extras.controls = self.source.header_extras(self.app)
+        self._set_extras()
         self.show_cached()
 
     def show_data(self):
         self.error = None
-        self.extras.controls = self.source.header_extras(self.app)
+        self._set_extras()
         self.show_cached()
 
     def set_loading(self, loading: bool):

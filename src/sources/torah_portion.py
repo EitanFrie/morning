@@ -25,7 +25,7 @@ from bs4 import BeautifulSoup
 from core.source import Source
 from core.storage import data_dir
 from core.text import clean
-from ui.widgets import empty_message, feed_row, fs
+from ui.widgets import empty_message, feed_row, fs, picker
 
 API = "https://www.sefaria.org/api"
 DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
@@ -106,20 +106,19 @@ class TorahPortion(Source):
     def header_extras(self, app):
         day = today_index() if self.day is None else self.day
 
-        async def pick_day(e):
-            self.day = int(e.control.value)
+        async def pick_day(key):
+            self.day = int(key)
             await app.refresh(self)
 
-        async def pick_commentator(e):
-            app.settings["torah_commentator"] = e.control.value
+        async def pick_commentator(key):
+            app.settings["torah_commentator"] = key
             await app.refresh(self)
 
+        choices = self._choices(app)
+        current = app.settings["torah_commentator"]
         return [
-            ft.Dropdown(value=str(day), width=110, dense=True, on_select=pick_day,
-                        options=[ft.DropdownOption(key=str(i), text=d) for i, d in enumerate(DAYS)]),
-            ft.Dropdown(value=app.settings["torah_commentator"], width=150, dense=True,
-                        on_select=pick_commentator, enable_filter=True,
-                        options=[ft.DropdownOption(key=en, text=he) for en, he in self._choices(app)]),
+            picker(DAYS[day], [(str(i), d) for i, d in enumerate(DAYS)], pick_day, width=110),
+            picker(dict(choices).get(current, current), choices, pick_commentator, expand=True),
         ]
 
     def _choices(self, app) -> list:

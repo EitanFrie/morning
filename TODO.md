@@ -2,6 +2,10 @@
 
 ## Waiting for the next release (committed, not yet in an APK)
 - Torah window color: brown -> purple (DEEP_PURPLE_400).
+- Side strip (for moving between categories) 50% wider: 30 -> 45 px, bigger dots.
+- Window headers on two lines: centered title + one-line "updated" status, pickers centered below.
+- Torah pickers: label always shows the FIRST letters (Hebrew, right-aligned, "…" at the end).
+- Science article reader fits the window width on phones (was a fixed 720 px -> right half cut).
 
 ## Daily Torah portion — first version BUILT (src/sources/torah_portion.py)
 Done: 4th window, parasha from Sefaria calendar, aliyah by weekday (Sun=1st … Shabbat=7th),
