@@ -13,6 +13,7 @@ Every item in every category uses the same row format:
 
 | Section | Source | How |
 |---|---|---|
+| **מזג אוויר** | open-meteo.com | Today: hour-by-hour graph (sky, °C, rain %), min–max; button for the next 3 days; city search |
 | **מבזקים** | inn.co.il/flashes | The site's own JSON API — last N hours (setting), tap a headline to expand (remembered) |
 | **NBA** | nba.com | Scoreboard + every box score downloaded together; tap a game for its box score |
 | **חדשות מדע** | davidson.org.il | Latest 3 (or 6) articles, opened in a clean reader view |
@@ -51,6 +52,8 @@ src/
     inn_flashes.py        news flashes
     nba.py                scores + box scores
     davidson_science.py   science articles
+    torah_portion.py      daily aliyah + chosen commentator (Sefaria, weekly offline bundle)
+    weather.py            weather + city search (Open-Meteo, no API key)
   ui/
     widgets.py            shared design - feed_row() is the one item format for all sections
     section.py            one category window: header, own scrolling, detail layer

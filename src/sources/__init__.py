@@ -7,7 +7,8 @@ from sources.davidson_science import DavidsonScience
 from sources.inn_flashes import InnFlashes
 from sources.nba import NbaScores
 from sources.torah_portion import TorahPortion
+from sources.weather import Weather
 
 
 def create_sources():
-    return [InnFlashes(), NbaScores(), DavidsonScience(), TorahPortion()]
+    return [Weather(), InnFlashes(), NbaScores(), DavidsonScience(), TorahPortion()]
