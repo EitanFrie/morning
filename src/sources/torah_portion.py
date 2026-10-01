@@ -48,7 +48,7 @@ class TorahPortion(Source):
     title = "פרשת השבוע"
     subtitle = "Sefaria"
     icon = ft.Icons.MENU_BOOK_ROUNDED
-    color = ft.Colors.BROWN_400
+    color = ft.Colors.DEEP_PURPLE_400
 
     def __init__(self):
         self.day: int | None = None  # None = today

@@ -1,5 +1,8 @@
 # TODO
 
+## Waiting for the next release (committed, not yet in an APK)
+- Torah window color: brown -> purple (DEEP_PURPLE_400).
+
 ## Daily Torah portion — first version BUILT (src/sources/torah_portion.py)
 Done: 4th window, parasha from Sefaria calendar, aliyah by weekday (Sun=1st … Shabbat=7th),
 day picker, commentator picker (default Rashi, saved), verse + commentary rows, ~20 KB per load.
