@@ -1,6 +1,6 @@
 # TODO
 
-## Waiting for the next release (committed, not yet in an APK)
+## Shipped in v0.3.x — check these on the phone
 - Torah window color: brown -> purple (DEEP_PURPLE_400).
 - Side strip (for moving between categories) 50% wider: 30 -> 45 px, bigger dots.
 - Window headers on two lines: centered title + one-line "updated" status, pickers centered below.
@@ -15,7 +15,7 @@
 ## Daily Torah portion — first version BUILT (src/sources/torah_portion.py)
 Done: 4th window, parasha from Sefaria calendar, aliyah by weekday (Sun=1st … Shabbat=7th),
 day picker, commentator picker (default Rashi, saved), verse + commentary rows, ~20 KB per load.
-Tested against live Sefaria (all 7 days, Rashi & Ramban). Not yet seen on screen/phone.
+Tested against live Sefaria (all 7 days, Rashi & Ramban); checked on screen in the preview.
 
 Weekly bundle (done): once per parasha the whole week is downloaded - every verse with ALL
 commentators (Sefaria /api/links per verse, 4 at a time, with retries) - and saved to
