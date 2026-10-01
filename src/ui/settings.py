@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING
 import flet as ft
 
 from core.storage import data_dir
+from core.updates import current_version
 from ui.widgets import card
 
 if TYPE_CHECKING:
     from app import App
 
-APP_VERSION = "0.1.0"
 REFRESH_CHOICES = [5, 10, 15, 30, 60, 180, 360, 720, 1440]
 
 
@@ -139,7 +139,11 @@ def open_settings(app: "App"):
                     _group("Data", ft.Icons.STORAGE_ROUNDED,
                            _row("Cached news", ft.OutlinedButton("Clear", icon=ft.Icons.DELETE_SWEEP_ROUNDED,
                                                                  on_click=clear_cache)),
-                           ft.Text(f"Morning v{APP_VERSION} · data in {data_dir()}",
+                           _row("App version", ft.OutlinedButton(
+                               "Check now", icon=ft.Icons.SYSTEM_UPDATE_ROUNDED,
+                               on_click=lambda e: app.page.run_task(app.check_for_updates, True)),
+                               f"v{current_version()} · updates come from GitHub releases"),
+                           ft.Text(f"Data in {data_dir()}",
                                    size=11, color=ft.Colors.ON_SURFACE_VARIANT, selectable=True)),
                 ],
                 padding=16,

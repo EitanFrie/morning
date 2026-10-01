@@ -16,6 +16,7 @@ import flet as ft
 from core.http import make_client
 from core.source import Source
 from core.storage import Cache, JsonFile, Settings
+from core.updates import newer_release
 from sources import create_sources
 from ui.section import Section
 from ui.settings import open_settings
@@ -71,6 +72,7 @@ class App:
         page.update()
 
         page.run_task(self._tick_status_labels)
+        page.run_task(self.check_for_updates)
         await self.refresh_stale()
 
     # ------------------------------------------------------------ layout
@@ -254,6 +256,28 @@ class App:
                 if not section.loading:
                     section.update_status()
             self.page.update()
+
+    # ------------------------------------------------------------ app updates
+
+    async def check_for_updates(self, manual: bool = False):
+        """Ask GitHub for a newer release (at most every 6 h unless asked from Settings)."""
+        if not manual and time.time() - self.state.data.get("update_checked", 0) < 6 * 3600:
+            return
+        self.state.data["update_checked"] = time.time()
+        self.state.save()
+        try:
+            release = await newer_release(self.client)
+        except Exception:
+            release = None  # offline / GitHub unreachable: try again next time
+        if release:
+            self.page.show_dialog(ft.SnackBar(
+                ft.Text(f"A new version is available: v{release['version']}"),
+                action=ft.SnackBarAction("Download", on_click=lambda e: self.open_url(release["url"])),
+                duration=ft.Duration(seconds=15),
+                show_close_icon=True,
+            ))
+        elif manual:
+            self.page.show_dialog(ft.SnackBar(ft.Text("You have the latest version")))
 
     # ------------------------------------------------------------ helpers used by sources/UI
 

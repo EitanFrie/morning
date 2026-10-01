@@ -37,6 +37,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then VERSION="0.0.${GITHUB_RUN_NUMBER}"; fi
+          echo "$VERSION" > src/version.txt   # the app reads this to check for updates
           # arm64 only: every modern phone/tablet, and a much smaller APK
           flet build apk --yes --arch arm64-v8a \
             --android-permissions android.permission.INTERNET=True \

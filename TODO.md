@@ -8,6 +8,9 @@
 - Science article reader fits the window width on phones (was a fixed 720 px -> right half cut).
 - Article images: sized to the window (were collapsing on the phone); tap an image ->
   full-screen viewer with pinch-zoom and drag (back closes it). Check on the phone.
+- In-app update check: on start (max every 6 h) + Settings > "Check now". Newer GitHub
+  release -> message with a Download button (opens the APK). Version comes from
+  src/version.txt, written by the GitHub build ("dev" when running from source).
 
 ## Daily Torah portion — first version BUILT (src/sources/torah_portion.py)
 Done: 4th window, parasha from Sefaria calendar, aliyah by weekday (Sun=1st … Shabbat=7th),
@@ -26,7 +29,7 @@ Still to do / check:
 - Aliyah crossing chapters (e.g. "Exodus 11:4-12:20"): mapping code exists, untested this week.
 - If the download is interrupted halfway, it simply starts over next time (nothing partial is saved).
 
-## Fixed APK signing key
+## Fixed APK signing key  (NEEDED for the in-app update check to install smoothly)
 Each CI build currently signs with a throwaway key, so a new APK may refuse to install over
 the old one ("App not installed") → you'd have to uninstall first (losing settings/cache).
 Fix: generate one keystore (`keytool -genkey ...`), store it base64 in a GitHub secret,
