@@ -260,9 +260,8 @@ class App:
     # ------------------------------------------------------------ app updates
 
     async def check_for_updates(self, manual: bool = False):
-        """Ask GitHub for a newer release (at most every 6 h unless asked from Settings)."""
-        if not manual and time.time() - self.state.data.get("update_checked", 0) < 6 * 3600:
-            return
+        """Ask GitHub for a newer release - on every app start, and from Settings > Check now.
+        (One tiny request; GitHub allows 60 per hour, far more than app starts.)"""
         self.state.data["update_checked"] = time.time()
         self.state.save()
         try:

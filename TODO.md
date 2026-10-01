@@ -8,7 +8,7 @@
 - Science article reader fits the window width on phones (was a fixed 720 px -> right half cut).
 - Article images: sized to the window (were collapsing on the phone); tap an image ->
   full-screen viewer with pinch-zoom and drag (back closes it). Check on the phone.
-- In-app update check: on start (max every 6 h) + Settings > "Check now". Newer GitHub
+- In-app update check: on every app start + Settings > "Check now". Newer GitHub
   release -> message with a Download button (opens the APK). Version comes from
   src/version.txt, written by the GitHub build ("dev" when running from source).
 
