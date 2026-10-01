@@ -11,4 +11,4 @@ from sources.weather import Weather
 
 
 def create_sources():
-    return [Weather(), InnFlashes(), NbaScores(), DavidsonScience(), TorahPortion()]
+    return [InnFlashes(), NbaScores(), DavidsonScience(), TorahPortion(), Weather()]
