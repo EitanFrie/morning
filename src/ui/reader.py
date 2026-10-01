@@ -42,10 +42,12 @@ async def _download_and_show(app, section, article):
 def _article_body(app, article: dict, content: dict) -> ft.Control:
     paragraph = ft.TextStyle(height=1.6)
     parts: list[ft.Control] = []
+    # Fit the window: full window width on a phone, at most MAX_WIDTH on a tablet.
+    width = min(MAX_WIDTH, app.window_width() - 8)
+    image_width = width - 32  # inside the 16 px padding on both sides
 
     if content.get("image"):
-        parts.append(ft.Image(src=content["image"], border_radius=16, fit=ft.BoxFit.COVER,
-                              width=float("inf"), height=220, fade_in_animation=ft.Animation(300)))
+        parts.append(_zoomable(app, content["image"], image_width, height=220, cover=True))
     parts.append(ft.Text(content.get("title") or article["title"], size=fs(app, 26),
                          weight=ft.FontWeight.BOLD, selectable=True))
     if content.get("subtitle"):
@@ -72,14 +74,45 @@ def _article_body(app, article: dict, content: dict) -> ft.Control:
             ))
         elif kind == "img" and block.get("src"):
             parts.append(ft.Column([
-                ft.Image(src=block["src"], border_radius=12, fit=ft.BoxFit.CONTAIN, width=float("inf")),
+                _zoomable(app, block["src"], image_width),
                 ft.Text(block.get("caption", ""), size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ], spacing=6))
 
     parts.append(ft.Container(height=40))
-    # Fit the window: full window width on a phone, at most MAX_WIDTH on a tablet.
-    width = min(MAX_WIDTH, app.window_width() - 8)
     return ft.Row(
         [ft.Container(ft.Column(parts, spacing=14, rtl=True), width=width, padding=16)],
         alignment=ft.MainAxisAlignment.CENTER,
     )
+
+
+def _zoomable(app, src: str, width: float, height: float | None = None, cover=False) -> ft.Control:
+    """An article image sized to the window; tap it to open the full-screen zoom view."""
+    return ft.Container(
+        ft.Image(src=src, width=width, height=height, fit=ft.BoxFit.COVER if cover else ft.BoxFit.FIT_WIDTH,
+                 fade_in_animation=ft.Animation(300),
+                 error_content=ft.Icon(ft.Icons.BROKEN_IMAGE_OUTLINED, color=ft.Colors.OUTLINE)),
+        border_radius=12,
+        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        on_click=lambda e: open_image(app, src),
+        tooltip="Tap to zoom",
+    )
+
+
+def open_image(app, src: str):
+    """Full-screen image: pinch to zoom, drag to move. Back closes it."""
+    view = ft.View(
+        route="/image",
+        padding=0,
+        bgcolor=ft.Colors.BLACK,
+        appbar=ft.AppBar(bgcolor=ft.Colors.BLACK, color=ft.Colors.WHITE),
+        controls=[
+            ft.InteractiveViewer(
+                ft.Image(src=src, fit=ft.BoxFit.CONTAIN),
+                min_scale=1,
+                max_scale=8,
+                boundary_margin=ft.Margin.all(40),
+                expand=True,
+            )
+        ],
+    )
+    app.push_view(view)

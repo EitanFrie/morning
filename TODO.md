@@ -6,6 +6,8 @@
 - Window headers on two lines: centered title + one-line "updated" status, pickers centered below.
 - Torah pickers: label always shows the FIRST letters (Hebrew, right-aligned, "…" at the end).
 - Science article reader fits the window width on phones (was a fixed 720 px -> right half cut).
+- Article images: sized to the window (were collapsing on the phone); tap an image ->
+  full-screen viewer with pinch-zoom and drag (back closes it). Check on the phone.
 
 ## Daily Torah portion — first version BUILT (src/sources/torah_portion.py)
 Done: 4th window, parasha from Sefaria calendar, aliyah by weekday (Sun=1st … Shabbat=7th),
