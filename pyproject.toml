@@ -23,8 +23,9 @@ copyright = "Eitan"
 [tool.flet.app]
 path = "src"
 
-# Pin Flutter packages that broke the APK build.
-# jni_flutter 1.0.4+1 (published 2026-10-06) needs jni ^1.1.0 but Flet resolves jni 1.0.x
-# -> "generated bindings expect package:jni ^1.1.0". 1.0.4 is the last version that built.
+# Pin Flutter packages that broke the APK build (2026-10-06/07).
+# jni_flutter's generated code needs jni >= 1.1, but something in Flet's Flutter setup resolves
+# jni 1.0.0 -> "generated bindings expect package:jni ^1.1.0, but 1.0.x was imported".
+# Force jni 1.1.0 (the version the last good build, v0.3.5, got).
 [tool.flet.flutter.pubspec.dependency_overrides]
-jni_flutter = "1.0.4"
+jni = "1.1.0"
