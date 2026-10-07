@@ -67,6 +67,21 @@ jobs:
           fi
           exit $status
 
+      - name: Report build error publicly (logs need a login; commit comments don't)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Build of ${GITHUB_REF_NAME} failed. Last lines of the build log:"
+            echo '```'
+            tail -n 60 build.log 2>/dev/null || echo "(no build.log - failed before the build started)"
+            echo '```'
+            echo "Disk: $(df -h / | tail -1)"
+            echo "Memory: $(free -m | sed -n 2p)"
+          } > report.md
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@report.md
+
       - uses: actions/upload-artifact@v4
         with:
           name: morning-apk
