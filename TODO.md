@@ -24,7 +24,13 @@ Measured: ~45 s for the full week, then switching day/commentator ~0.2 s, offlin
 The window shows "מוריד את תוכן השבוע… n/7" while downloading.
 (A whole aliyah in ONE links request was ~7 MB and the server kept cutting it off.)
 
+Offline (v0.3.6): opening the window offline uses the saved week (verses + commentators);
+"&nbsp;"-style HTML codes are cleaned; a verse that times out (e.g. Genesis 1:1) is skipped
+and retried on the next online start; progress shows aliyah + verse numbers.
+
 Still to do / check:
+- Download speed varies a lot: last week ~45 s, Bereishit ~9.5 min (very heavily commented,
+  slow server). Idea if annoying: download TODAY's aliyah first and show it, rest in background.
 - See it in the app on screen + phone (two dropdowns in the header; commentator list has ~34 names).
 - Aliyah crossing chapters (e.g. "Exodus 11:4-12:20"): mapping code exists, untested this week.
 - If the download is interrupted halfway, it simply starts over next time (nothing partial is saved).
