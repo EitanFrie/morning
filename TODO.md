@@ -32,10 +32,10 @@ Still to do / check:
 - Download speed varies a lot: last week ~45 s, Bereishit ~9.5 min (very heavily commented,
   slow server). Idea if annoying: download TODAY's aliyah first and show it, rest in background.
 - See it in the app on screen + phone (two dropdowns in the header; commentator list has ~34 names).
-- Aliyah crossing chapters (e.g. "Exodus 11:4-12:20"): mapping code exists, untested this week.
+- Aliyah crossing chapters: tested OK with Genesis 1:1-2:3 (34 verses).
 - If the download is interrupted halfway, it simply starts over next time (nothing partial is saved).
 
-## Fixed APK signing key — key created, waiting for the 3 GitHub secrets
+## Fixed APK signing key — DONE (secrets added, signed since v0.3.2)
 Key: C:\Users\Eitan\morning-signing\morning.p12 (NOT in the repo — back it up! Losing it means
 uninstalling the app to update). Values to paste: GITHUB_SECRETS.txt in the same folder.
 build-apk.yml already uses ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS
