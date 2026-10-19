@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 11+: apps must declare that they use the TTS service, otherwise the
+         voice engine (e.g. Google TTS) is invisible to them and nothing is spoken. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+</manifest>

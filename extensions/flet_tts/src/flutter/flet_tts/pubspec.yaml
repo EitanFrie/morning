@@ -1,0 +1,26 @@
+name: flet_tts
+description: Text-to-speech for Flet apps (wraps flutter_tts, uses the device's voice engine).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_tts: ^4.2.5
+
+  flet:
+    path: ../../../../../../../packages/flet
+
+# A tiny Android plugin part, only so our AndroidManifest.xml (the TTS <queries>
+# entry Android 11+ requires to reach the voice engine) gets merged into the app.
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.eitan.flet_tts
+        pluginClass: FletTtsPlugin

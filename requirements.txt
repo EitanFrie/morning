@@ -2,3 +2,4 @@ flet[all]==1.0.3
 httpx
 beautifulsoup4
 tzdata
+-e extensions/flet_tts

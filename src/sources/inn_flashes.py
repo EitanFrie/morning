@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import flet as ft
 
 from core.source import Source
+from core.speech import HEBREW, SpeakButton
 from core.text import clean, html_to_text
 from ui.widgets import empty_message, feed_row, fs
 
@@ -62,6 +63,14 @@ class InnFlashes(Source):
         return flashes
 
     # ------------------------------------------------------------------ UI
+
+    def header_extras(self, app):
+        def top_10():
+            entry = app.cache.get(self.id)
+            flashes = entry["data"][:10] if entry else []
+            return [f'{f["title"]}.' for f in flashes] or ["אין מבזקים כרגע."]
+
+        return [SpeakButton(app, top_10, HEBREW, tooltip="הקרא 10 מבזקים אחרונים")]
 
     def render(self, flashes, app):
         if not flashes:

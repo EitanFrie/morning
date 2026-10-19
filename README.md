@@ -18,6 +18,12 @@ Every item in every category uses the same row format:
 | **NBA** | nba.com | Scoreboard + every box score downloaded together; tap a game for its box score |
 | **חדשות מדע** | davidson.org.il | Latest 3 (or 6) articles, opened in a clean reader view |
 
+**Reading aloud** uses the phone's own voice engine (no voices shipped, ~0 MB) through our small
+extension in `extensions/flet_tts` (wraps Flutter's `flutter_tts`). 🔊 buttons: top-10 flashes,
+NBA scores ("Pistons versus Hornets, 118 to 100. Pistons won."), each Torah verse + "read all",
+science articles. Hebrew abbreviations are expanded first: `src/core/abbreviations.json` (add freely).
+Reading aloud only works in the phone app, not in the PC preview.
+
 ## Run it on the computer
 
 ```bash

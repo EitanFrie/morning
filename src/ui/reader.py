@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import flet as ft
 
+from core.speech import HEBREW, SpeakButton
 from ui.widgets import fs, skeleton
 
 if TYPE_CHECKING:
@@ -18,8 +19,11 @@ MAX_WIDTH = 720  # comfortable line length on tablets
 def open_article(app: "App", section_id: str, article: dict):
     """article = list-row data; article["content"] may be missing (not downloaded yet)."""
     section = app.sections[section_id]
-    actions = [ft.IconButton(ft.Icons.OPEN_IN_NEW_ROUNDED, tooltip="Open on website",
-                             on_click=lambda e: app.open_url(article["url"]))]
+    actions = [
+        SpeakButton(app, lambda: _spoken_article(article), HEBREW, tooltip="הקרא את הכתבה"),
+        ft.IconButton(ft.Icons.OPEN_IN_NEW_ROUNDED, tooltip="Open on website",
+                      on_click=lambda e: app.open_url(article["url"])),
+    ]
     if article.get("content"):
         section.open_detail(article["title"], _article_body(app, article, article["content"]), actions)
     else:
@@ -37,6 +41,18 @@ async def _download_and_show(app, section, article):
         section.set_detail_content(_article_body(app, article, article["content"]))
     except Exception as ex:
         section.set_detail_content(ft.Text(f"Could not load the article: {ex}", color=ft.Colors.ERROR))
+
+
+def _spoken_article(article: dict) -> list[str]:
+    """Title, subtitle and text of the article (images skipped)."""
+    content = article.get("content")
+    if not content:
+        return ["הכתבה עדיין נטענת."]
+    parts = [content.get("title") or article["title"]]
+    if content.get("subtitle"):
+        parts.append(content["subtitle"])
+    parts += [b["text"] for b in content["blocks"] if b["type"] in ("p", "h", "li", "quote")]
+    return [p if p.rstrip().endswith((".", ":", "?", "!")) else p + "." for p in parts]
 
 
 def _article_body(app, article: dict, content: dict) -> ft.Control:

@@ -108,6 +108,18 @@ def open_settings(app: "App"):
                         options=[ft.DropdownOption(key=str(m), text=_label(m)) for m in choices]),
         )
 
+    # --- reading aloud ---
+    rate_labels = {0.3: "Slow", 0.4: "Calm", 0.5: "Normal", 0.6: "Brisk", 0.7: "Fast"}
+    rate_text = ft.Text(rate_labels.get(s["speech_rate"], ""), weight=ft.FontWeight.W_600,
+                        color=ft.Colors.PRIMARY)
+
+    def on_rate(e):
+        s["speech_rate"] = round(float(e.control.value), 1)
+        rate_text.value = rate_labels.get(s["speech_rate"], "")
+        rate_text.update()
+
+    rate = ft.Slider(min=0.3, max=0.7, divisions=4, value=s["speech_rate"], on_change_end=on_rate)
+
     # --- data ---
     def clear_cache(e):
         app.cache.clear()
@@ -131,6 +143,9 @@ def open_settings(app: "App"):
                            hours),
                     _group("Science", ft.Icons.SCIENCE_ROUNDED,
                            _row("Articles in the feed", science)),
+                    _group("Reading aloud", ft.Icons.RECORD_VOICE_OVER_ROUNDED,
+                           _row("Speed", rate_text, "Uses your phone's voice (Settings > Text-to-speech)"),
+                           rate),
                     _group("Auto refresh", ft.Icons.UPDATE_ROUNDED,
                            ft.Text("When the app opens, a section reloads by itself if its data "
                                    "is older than this. The refresh button on each section always works.",

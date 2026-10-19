@@ -15,6 +15,7 @@ import flet as ft
 
 from core.http import make_client
 from core.source import Source
+from core.speech import Speaker
 from core.storage import Cache, JsonFile, Settings
 from core.updates import newer_release
 from sources import create_sources
@@ -37,6 +38,7 @@ class App:
         self.state = JsonFile("state.json", {"expanded": {}, "last_visit": 0})
         self.client = make_client()
         self.launcher = ft.UrlLauncher()
+        self.speaker = Speaker(self)  # reading aloud (phone's own voice engine)
 
         # Remember when you were here last, to mark new headlines.
         self.previous_visit = self.state.data["last_visit"]
@@ -294,6 +296,9 @@ class App:
 
     def is_new_since_last_visit(self, when: datetime) -> bool:
         return bool(self.previous_visit) and when.timestamp() > self.previous_visit
+
+    def toast(self, message: str):
+        self.page.show_dialog(ft.SnackBar(ft.Text(message)))
 
     def open_url(self, url: str):
         self.page.run_task(self.launcher.launch_url, url)

@@ -24,6 +24,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from core.source import Source
+from core.speech import HEBREW, SpeakButton
 from core.storage import data_dir
 from core.text import clean
 from ui.widgets import empty_message, feed_row, fs, picker
@@ -128,7 +129,19 @@ class TorahPortion(Source):
         return [
             picker(DAYS[day], [(str(i), d) for i, d in enumerate(DAYS)], pick_day, width=110),
             picker(dict(choices).get(current, current), choices, pick_commentator, expand=True),
+            SpeakButton(app, lambda: self._read_all(app), HEBREW, tooltip="הקרא את כל הקטע"),
         ]
+
+    def _read_all(self, app) -> list[str]:
+        """Everything on screen: each verse, then the chosen commentator on it."""
+        entry = app.cache.get(self.id)
+        if not entry:
+            return []
+        data = entry["data"]
+        parts = [f'פרשת {data["parasha"]}.']
+        for verse in data["verses"]:
+            parts += _spoken_verse(verse, data.get("commentator_he", ""))
+        return parts
 
     def _choices(self, app) -> list:
         """Commentators found in the downloaded week (fallback: the classic list)."""
@@ -166,6 +179,8 @@ class TorahPortion(Source):
             rows.append(feed_row(
                 app, verse["text"], meta=verse["label"], details=details,
                 expanded=True, title_lines=None, title_bold=False,
+                trailing=SpeakButton(app, lambda v=verse: _spoken_verse(v, heb), HEBREW, size=20,
+                                     tooltip="הקרא פסוק"),
             ))
         return ft.Column(rows, spacing=0, rtl=True)
 
@@ -282,6 +297,15 @@ def _flatten(items):
             yield from _flatten(x)
         else:
             yield x
+
+
+def _spoken_verse(verse: dict, commentator_he: str) -> list[str]:
+    """A verse, then '<commentator>:' and the comments on it."""
+    parts = [verse["text"]]
+    if verse["comments"]:
+        parts.append(f"{commentator_he}:")
+        parts += verse["comments"]
+    return parts
 
 
 def _stored_week() -> dict | None:

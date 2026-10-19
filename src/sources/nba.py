@@ -18,6 +18,7 @@ import flet as ft
 
 from core.http import next_data
 from core.source import Source
+from core.speech import ENGLISH, SpeakButton
 from ui.boxscore import open_box_score
 from ui.widgets import empty_message, feed_row, fs, thumb
 
@@ -85,7 +86,14 @@ class NbaScores(Source):
             self.day = None
             await app.refresh(self)
 
+        def scores():
+            entry = app.cache.get(self.id)
+            games = entry["data"]["games"] if entry else []
+            order = {LIVE: 0, SCHEDULED: 1, FINAL: 2}
+            return [_spoken(g, app) for g in sorted(games, key=lambda g: order.get(g["status"], 3))]                 or ["No games today."]
+
         return [
+            SpeakButton(app, scores, ENGLISH, tooltip="Read the scores"),
             ft.IconButton(ft.Icons.CHEVRON_LEFT_ROUNDED, on_click=shift(-1), tooltip="Previous day"),
             ft.TextButton(
                 day.strftime("%a %d/%m"),
@@ -195,6 +203,25 @@ async def _fetch_box_score(app, game_id: str) -> dict:
 
 
 # ---------------------------------------------------------------- UI pieces
+
+
+def _spoken(game: dict, app) -> str:
+    """'Pistons versus Hornets, 118 to 100. Pistons won.' (away team first, like the rows)."""
+    away, home = game["away"], game["home"]
+    match = f'{away["name"]} versus {home["name"]}'
+    if game["status"] == FINAL:
+        winner = away if away["score"] > home["score"] else home
+        return f'{match}, {away["score"]} to {home["score"]}. {winner["name"]} won.'
+    if game["status"] == LIVE:
+        status = game["status_text"] or "live"
+        for short, words in (("Q1", "first quarter"), ("Q2", "second quarter"), ("Q3", "third quarter"),
+                             ("Q4", "fourth quarter"), ("OT", "overtime")):
+            status = status.replace(short, words + ",")
+        return f'{match}, {away["score"]} to {home["score"]}, {status}.'
+    if game.get("time_utc"):
+        tip = datetime.fromisoformat(game["time_utc"].replace("Z", "+00:00"))
+        return f'{match}, starts at {tip.astimezone(ZoneInfo(app.settings["timezone"])).strftime("%H:%M")}.'
+    return f"{match}, later today."
 
 
 def _live_dot() -> ft.Control:

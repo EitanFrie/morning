@@ -8,6 +8,7 @@ dependencies = [
     "httpx",
     "beautifulsoup4",
     "tzdata",  # timezone data for Android (Israel / New York times)
+    "flet-tts",  # our own extension: reading aloud with the phone's voice (extensions/flet_tts)
 ]
 
 [dependency-groups]
@@ -22,6 +23,10 @@ copyright = "Eitan"
 
 [tool.flet.app]
 path = "src"
+
+# Local packages installed from this repo when building the APK.
+[tool.flet.dev_packages]
+flet-tts = "extensions/flet_tts"
 
 # Pin Flutter packages that broke the APK build (2026-10-06/07).
 # jni_flutter's generated code needs jni >= 1.1, but something in Flet's Flutter setup resolves
