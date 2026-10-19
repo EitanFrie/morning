@@ -1,5 +1,11 @@
 # TODO
 
+## v0.5.2 — check on the phone
+- Fixed crash "No drawer defined" (menu tapped while a Settings screen was still on the stack).
+- Reading never overlaps: a new reading / stop waits until the old one has fully ended, and
+  calls to the voice engine are serialized.
+- "Stuck" pieces: realistic time limit per sentence (by length + speed) -> stop, retry once, skip.
+
 ## v0.5.1 — check on the phone
 - Long readings: now read sentence by sentence (max ~400 chars), a failed piece is retried
   once (before: a 3000-char piece that failed was silently lost = "stops in the middle").

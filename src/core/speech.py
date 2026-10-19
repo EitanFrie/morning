@@ -138,6 +138,9 @@ class Speaker:
         self._language = HEBREW
         self._paused = False
         self._error = False
+        self._engine_lock = asyncio.Lock()  # never two calls to the voice engine at once
+        self._loop_idle = asyncio.Event()   # set when no reading loop is running
+        self._loop_idle.set()
         self._buttons: dict[str, list] = {}  # key -> live buttons with that key
         self.listeners: list = []      # called on start/stop (e.g. the global stop button)
 
@@ -173,36 +176,61 @@ class Speaker:
         self._set_active(key or "_")
         await self._play()
 
+    async def _engine_call(self, method: str, *args, **kwargs):
+        engine = self._engine()
+        if engine is None:
+            return
+        async with self._engine_lock:
+            try:
+                await getattr(engine, method)(*args, **kwargs)
+            except Exception:
+                self._error = True
+
+    def _time_limit(self, piece: str) -> float:
+        """How long a piece may take before we call it stuck (~14 chars/s at normal speed)."""
+        chars_per_second = 14 * max(self.app.settings["speech_rate"], 0.2) / 0.5
+        return 8 + len(piece) / (chars_per_second * 0.6)
+
     async def _play(self):
-        """Speak the queue from the current index until done, paused or stopped."""
+        """Speak the queue from the current index until done, paused or stopped.
+        Only one loop runs at a time: a new one waits until the old one has fully ended."""
         self._run += 1
         run = self._run
-        engine = self._engine()
-        retried = False
-        while self._index < len(self._queue):
-            if run != self._run:
-                return  # paused or stopped - the index stays on the interrupted piece
-            piece = self._queue[self._index]
-            self._done.clear()
-            self._error = False
-            await engine.speak(piece, language=self._language, rate=self.app.settings["speech_rate"],
-                               voice=self._voice(self._language))
-            try:  # wait until this piece is spoken (generous: ~5 chars per second)
-                await asyncio.wait_for(self._done.wait(), timeout=20 + len(piece) / 5)
-            except asyncio.TimeoutError:
-                pass
-            if run != self._run:
-                return
-            if self._error and not retried:
-                retried = True  # the engine failed on this piece: try it once more
-                continue
-            if self._error:
-                self.app.toast("A sentence could not be read - skipped")
+        await self._loop_idle.wait()
+        if run != self._run:
+            return
+        self._loop_idle.clear()
+        try:
             retried = False
-            self._index += 1
-        if run == self._run:  # finished normally
-            self._queue = []
-            self._set_active(None)
+            while self._index < len(self._queue):
+                if run != self._run:
+                    return  # paused or stopped - the index stays on the interrupted piece
+                piece = self._queue[self._index]
+                self._done.clear()
+                self._error = False
+                await self._engine_call("speak", piece, language=self._language,
+                                        rate=self.app.settings["speech_rate"],
+                                        voice=self._voice(self._language))
+                try:
+                    await asyncio.wait_for(self._done.wait(), timeout=self._time_limit(piece))
+                except asyncio.TimeoutError:
+                    # the engine went silent ("stuck"): stop it and treat as a failure
+                    await self._engine_call("stop")
+                    self._error = True
+                if run != self._run:
+                    return
+                if self._error and not retried:
+                    retried = True  # try this piece once more
+                    continue
+                if self._error:
+                    self.app.toast("A sentence could not be read - skipped")
+                retried = False
+                self._index += 1
+            if run == self._run:  # finished normally
+                self._queue = []
+                self._set_active(None)
+        finally:
+            self._loop_idle.set()
 
     @property
     def paused(self) -> bool:
@@ -214,11 +242,9 @@ class Speaker:
             return
         self._paused = True
         self._run += 1
-        try:
-            await self._tts.stop()
-        except Exception:
-            pass
         self._done.set()
+        await self._engine_call("stop")
+        await self._wait_idle()
         self._notify()
 
     async def resume(self):
@@ -235,16 +261,22 @@ class Speaker:
             await self.pause()
 
     async def stop(self):
+        """Stop and wait until the old reading loop has really ended, so a new reading never
+        overlaps the previous one inside the voice engine."""
         self._run += 1
         self._paused = False
         self._queue = []
         self._set_active(None)
-        if self._tts is not None:
-            try:
-                await self._tts.stop()
-            except Exception:
-                pass
         self._done.set()
+        if self._tts is not None:
+            await self._engine_call("stop")
+        await self._wait_idle()
+
+    async def _wait_idle(self):
+        try:
+            await asyncio.wait_for(self._loop_idle.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            self._loop_idle.set()  # never block forever on a broken engine
 
     async def voices(self, language: str) -> list[dict]:
         engine = self._engine()
@@ -258,10 +290,8 @@ class Speaker:
     async def sample(self, voice: dict, language: str):
         text = "שלום, זה הקול שנבחר לקריאה." if language == HEBREW else "Hello, this is the selected voice."
         await self.stop()
-        engine = self._engine()
-        if engine:
-            await engine.speak(text, language=language, rate=self.app.settings["speech_rate"],
-                               voice=voice)
+        await self._engine_call("speak", text, language=language,
+                                rate=self.app.settings["speech_rate"], voice=voice)
 
     # ---- buttons ----
 

@@ -196,7 +196,13 @@ class App:
         self.page.update()
 
     async def _open_drawer(self, e):
-        await self.page.show_drawer()
+        # The drawer lives on the MAIN screen; page.show_drawer() would use the TOP screen
+        # (e.g. Settings, if it is still open) -> "No drawer defined". Close extra screens first.
+        if len(self.page.views) > 1:
+            del self.page.views[1:]
+            self.page.update()
+        if self.page.views[0].drawer is not None:
+            await self.page.views[0].show_drawer()
 
     async def _refresh_all_click(self, e):
         await self.refresh_all()
@@ -231,7 +237,8 @@ class App:
 
     async def jump_to(self, source_id: str):
         if not self.wide:
-            await self.page.close_drawer()
+            if self.page.views[0].drawer is not None:
+                await self.page.views[0].close_drawer()
         await self.go_to(list(self.sections).index(source_id))
 
     async def _on_back(self, e):
