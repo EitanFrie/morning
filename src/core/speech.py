@@ -48,6 +48,8 @@ def _built_in() -> dict[str, str]:
 
 
 def normalize_quotes(text: str) -> str:
+    """״ -> " and ׳ -> ' (and curly quotes); drops invisible direction marks (הקב״<LRM>ה)."""
+    text = re.sub("[\u200e\u200f\u202a-\u202e]", "", text)
     return (text.replace("״", '"').replace("׳", "'").replace("”", '"')
             .replace("“", '"').replace("’", "'"))
 

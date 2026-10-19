@@ -4,16 +4,40 @@
     {
       "name": "morning-web",
       "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["src/main.py"],
-      "env": { "MORNING_WEB": "1", "PYTHONUNBUFFERED": "1" },
+      "runtimeArgs": [
+        "src/main.py"
+      ],
+      "env": {
+        "MORNING_WEB": "1",
+        "PYTHONUNBUFFERED": "1"
+      },
       "port": 8550
     },
     {
       "name": "morning-web-nba-test",
       "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["src/main.py"],
-      "env": { "MORNING_WEB": "1", "PYTHONUNBUFFERED": "1", "NBA_DAY": "2026-04-10" },
+      "runtimeArgs": [
+        "src/main.py"
+      ],
+      "env": {
+        "MORNING_WEB": "1",
+        "PYTHONUNBUFFERED": "1",
+        "NBA_DAY": "2026-04-10"
+      },
       "port": 8550
+    },
+    {
+      "name": "abbreviations-review",
+      "runtimeExecutable": ".venv/Scripts/streamlit.exe",
+      "runtimeArgs": [
+        "run",
+        "tools/review_abbreviations.py",
+        "--server.port",
+        "8501",
+        "--server.headless",
+        "true"
+      ],
+      "port": 8501
     }
   ]
 }

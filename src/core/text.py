@@ -4,12 +4,15 @@ import re
 
 from bs4 import BeautifulSoup
 
-_SPACES = re.compile(r"[ \t ‏‎]+")
+_SPACES = re.compile(r"[ \t\u00a0]+")
+# invisible direction marks: removed, NOT turned into spaces (Chizkuni writes הקב״<LRM>ה - a space there breaks the abbreviation)
+_DIRECTION_MARKS = re.compile("[\u200e\u200f\u202a-\u202e]")
 
 
 def clean(text: str) -> str:
     """Collapse runs of spaces, keep line breaks, trim."""
-    lines = (_SPACES.sub(" ", line).strip() for line in (text or "").splitlines())
+    text = _DIRECTION_MARKS.sub("", text or "")
+    lines = (_SPACES.sub(" ", line).strip() for line in text.splitlines())
     return "\n".join(line for line in lines if line)
 
 

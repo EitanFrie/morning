@@ -5,3 +5,4 @@ build/
 dist/
 *.apk
 .claude/settings.local.json
+tools/.harvest_cache/
