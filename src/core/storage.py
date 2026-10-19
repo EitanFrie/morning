@@ -66,9 +66,13 @@ DEFAULT_SETTINGS = {
     "weather_city": {"name": "ירושלים", "lat": 31.76904, "lon": 35.21633, "country": "ישראל"},
     "weather_show_days": False,    # show the next 3 days under today
     "speech_rate": 0.5,            # reading-aloud speed (0.3 slow ... 0.7 fast)
+    "voice_he": None,              # chosen Hebrew voice {"name", "locale"} (None = phone default)
+    "voice_en": None,              # chosen English voice
+    "user_abbreviations": {},      # abbreviations you taught the app: {'ואכמ"ל': "ואין כאן מקום להאריך"}
+    "ignored_abbreviations": [],   # "don't ask again" (read as written)
     # A source refreshes by itself when the app is opened (or brought back)
     # and its data is older than this many minutes.
-    "refresh_minutes": {"weather": 60, "inn": 30, "nba": 10, "science": 360, "torah": 720},
+    "refresh_minutes": {"weather": 60, "inn": 30, "nba": 10, "nba_news": 60, "science": 360, "torah": 720},
 }
 
 

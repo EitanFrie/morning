@@ -65,12 +65,13 @@ class InnFlashes(Source):
     # ------------------------------------------------------------------ UI
 
     def header_extras(self, app):
-        def top_10():
+        def all_flashes():
             entry = app.cache.get(self.id)
-            flashes = entry["data"][:10] if entry else []
+            flashes = entry["data"] if entry else []
             return [f'{f["title"]}.' for f in flashes] or ["אין מבזקים כרגע."]
 
-        return [SpeakButton(app, top_10, HEBREW, tooltip="הקרא 10 מבזקים אחרונים")]
+        # Reads every flash shown (newest first) until the end - or until you stop it.
+        return [SpeakButton(app, all_flashes, HEBREW, tooltip="הקרא את המבזקים", key="inn")]
 
     def render(self, flashes, app):
         if not flashes:

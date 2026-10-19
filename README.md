@@ -16,12 +16,16 @@ Every item in every category uses the same row format:
 | **מזג אוויר** | open-meteo.com | Today: hour-by-hour graph (sky, °C, rain %), min–max; button for the next 3 days; city search |
 | **מבזקים** | inn.co.il/flashes | The site's own JSON API — last N hours (setting), tap a headline to expand (remembered) |
 | **NBA** | nba.com | Scoreboard + every box score downloaded together; tap a game for its box score |
+| **NBA News** | nba.com/news | Only the hand-picked "featured" stories, full text in the reader |
 | **חדשות מדע** | davidson.org.il | Latest 3 (or 6) articles, opened in a clean reader view |
 
 **Reading aloud** uses the phone's own voice engine (no voices shipped, ~0 MB) through our small
 extension in `extensions/flet_tts` (wraps Flutter's `flutter_tts`). 🔊 buttons: top-10 flashes,
 NBA scores ("Pistons versus Hornets, 118 to 100. Pistons won."), each Torah verse + "read all",
-science articles. Hebrew abbreviations are expanded first: `src/core/abbreviations.json` (add freely).
+science articles, NBA news, weather. Hebrew is prepared first: God's name -> "השם", abbreviations
+expanded also with a prefix letter (וא"י -> וארץ ישראל): built-in `src/core/abbreviations.json` +
+the ones you teach the app (🎓 in the Torah window, or Settings). A stop button appears in the top
+bar while reading. Voices (e.g. a male one) are chosen in Settings by listening to samples.
 Reading aloud only works in the phone app, not in the PC preview.
 
 ## Run it on the computer

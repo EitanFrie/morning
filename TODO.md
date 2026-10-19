@@ -1,5 +1,15 @@
 # TODO
 
+## v0.5.0 — check on the phone
+- Global stop button appears in the top bar while reading (tablet: floating red button).
+- NBA scores stop button (was broken: refreshed buttons lost track of the reading).
+- Flashes: reads ALL flashes, not 10. Weather 🔊 in the requested Hebrew format.
+- Settings > Reading aloud > choose Hebrew / English voice (▶ samples; Android doesn't say
+  male/female). Settings > Abbreviations: add / delete your own.
+- Torah: יהוה -> השם; prefix letters (וא"י); 🎓 teach unknown abbreviations (Sefaria dictionary
+  suggestions; daf-yomi.com blocks automated requests with a Cloudflare check, so not used).
+- NBA News window (featured stories only).
+
 ## Shipped in v0.3.x — check these on the phone
 - Torah window color: brown -> purple (DEEP_PURPLE_400).
 - Side strip (for moving between categories) 50% wider: 30 -> 45 px, bigger dots.

@@ -2,8 +2,12 @@
 Reading aloud with the phone's own voice engine (via the flet_tts extension).
 
 - One Speaker per app; only one thing is read at a time (a new request stops the previous).
-- Text is cleaned (Hebrew abbreviations expanded) and split into chunks the engine accepts.
-- SpeakButton: the shared 🔊 / ⏹ button used in every section.
+- Hebrew text is prepared first: God's name -> "השם", abbreviations expanded (also with a
+  prefix letter: וא"י -> וארץ ישראל), long text split into chunks the engine accepts.
+- SpeakButton: the shared 🔊 / ⏹ button. Buttons are identified by a KEY (not the object),
+  so a button that was re-created by a refresh still knows it is the one reading.
+- Abbreviations = built-in list (abbreviations.json) + the ones you taught the app
+  (settings["user_abbreviations"]); yours win.
 """
 
 import asyncio
@@ -21,29 +25,72 @@ except ImportError:  # pragma: no cover
 HEBREW, ENGLISH = "he-IL", "en-US"
 CHUNK = 3000  # Android's engine accepts ~4000 characters per utterance
 
-_ABBREVIATIONS: dict[str, str] | None = None
-_HEB_LETTER = "א-ת"
+LETTER = "א-ת"
+MARKS = "֑-ׇ"          # nikud + cantillation
+PREFIXES = "ובלכמהש"             # one-letter prefixes: ו and, ב in, ל to, כ as, מ from, ה the, ש that
+_BUILT_IN: dict[str, str] | None = None
+
+# יהוה with any vowel marks, optionally after prefix letters (לַיהוָה, וַיהוָה...)
+_TETRAGRAMMATON = re.compile(
+    rf"(?<![{LETTER}])((?:[{PREFIXES}][{MARKS}]*){{0,2}})"
+    rf"י[{MARKS}]*ה[{MARKS}]*ו[{MARKS}]*ה[{MARKS}]*(?![{LETTER}])"
+)
+# An abbreviation as written: letters + " + one letter (רש"י) or letters + ' (וכו')
+ABBREVIATION = re.compile(rf"(?<![{LETTER}])[{LETTER}]{{1,6}}(?:\"[{LETTER}]|'(?![{LETTER}]))")
 
 
-def _abbreviations() -> dict[str, str]:
-    global _ABBREVIATIONS
-    if _ABBREVIATIONS is None:
-        path = Path(__file__).with_name("abbreviations.json")
-        data = json.loads(path.read_text(encoding="utf-8"))
-        # longest first, so "רבותינו ז"ל" wins over "ז"ל"
-        _ABBREVIATIONS = dict(sorted(((k, v) for k, v in data.items() if not k.startswith("_")),
-                                     key=lambda kv: -len(kv[0])))
-    return _ABBREVIATIONS
+def _built_in() -> dict[str, str]:
+    global _BUILT_IN
+    if _BUILT_IN is None:
+        data = json.loads(Path(__file__).with_name("abbreviations.json").read_text(encoding="utf-8"))
+        _BUILT_IN = {k: v for k, v in data.items() if not k.startswith("_")}
+    return _BUILT_IN
 
 
-def expand_abbreviations(text: str) -> str:
-    """ואכמ"ל -> ואין כאן מקום להאריך, etc. Accepts both " and ״ (and ' / ׳)."""
-    text = text.replace("״", '"').replace("׳", "'").replace("”", '"').replace("“", '"')
-    for short, full in _abbreviations().items():
+def normalize_quotes(text: str) -> str:
+    return (text.replace("״", '"').replace("׳", "'").replace("”", '"')
+            .replace("“", '"').replace("’", "'"))
+
+
+def all_abbreviations(settings) -> dict[str, str]:
+    """Built-in + learned (learned win), longest first so 'רבותינו ז"ל' beats 'ז"ל'."""
+    merged = {**_built_in(), **(settings["user_abbreviations"] if settings else {})}
+    return dict(sorted(merged.items(), key=lambda kv: -len(kv[0])))
+
+
+def known(abbreviation: str, settings) -> bool:
+    """True if the abbreviation (possibly with a prefix letter) has a meaning."""
+    table = all_abbreviations(settings)
+    word = normalize_quotes(abbreviation)
+    for cut in range(0, 3):
+        if cut and (len(word) <= cut + 1 or word[cut - 1] not in PREFIXES):
+            break
+        if word[cut:] in table:
+            return True
+    return word in (settings["ignored_abbreviations"] if settings else [])
+
+
+def unknown_abbreviations(texts: list[str], settings) -> list[str]:
+    """Abbreviations in the texts that the app can't read yet (each once, in order)."""
+    seen, out = set(), []
+    for text in texts:
+        for match in ABBREVIATION.findall(normalize_quotes(text)):
+            if match not in seen and not known(match, settings):
+                seen.add(match)
+                out.append(match)
+    return out
+
+
+def prepare_hebrew(text: str, settings=None) -> str:
+    """God's name -> השם, ה' -> השם, abbreviations -> full words (keeping a prefix letter)."""
+    text = _TETRAGRAMMATON.sub(lambda m: m.group(1) + "השם", text)
+    text = normalize_quotes(text)
+    text = re.sub(rf"(?<![{LETTER}])([{PREFIXES}]?)ה'(?![{LETTER}])", r"\1השם", text)
+    for short, full in all_abbreviations(settings).items():
         if short == full:
             continue
-        pattern = rf"(?<![{_HEB_LETTER}]){re.escape(short)}(?![{_HEB_LETTER}])"
-        text = re.sub(pattern, full, text)
+        pattern = rf"(?<![{LETTER}])([{PREFIXES}]{{0,2}}){re.escape(short)}(?![{LETTER}])"
+        text = re.sub(pattern, lambda m: m.group(1) + full, text)
     return text
 
 
@@ -73,12 +120,14 @@ class Speaker:
         self.app = app
         self._tts = None
         self._done = asyncio.Event()
-        self._run = 0  # increases on every new request / stop -> older loops quit
-        self.active_button: "SpeakButton | None" = None
+        self._run = 0                  # increases on every new request / stop -> older loops quit
+        self.active_key: str | None = None   # which button is reading
+        self._buttons: dict[str, list] = {}  # key -> live buttons with that key
+        self.listeners: list = []      # called on start/stop (e.g. the global stop button)
 
     @property
-    def available(self) -> bool:
-        return Tts is not None
+    def speaking(self) -> bool:
+        return self.active_key is not None
 
     def _engine(self):
         if self._tts is None and Tts is not None:
@@ -93,7 +142,10 @@ class Speaker:
         self._done.set()
         self.app.toast(f"Voice error: {getattr(e, 'data', '')}")
 
-    async def say(self, parts: list[str], language: str = HEBREW, button: "SpeakButton | None" = None):
+    def _voice(self, language):
+        return self.app.settings["voice_he" if language == HEBREW else "voice_en"]
+
+    async def say(self, parts: list[str], language: str = HEBREW, key: str | None = None):
         """Read parts in order. Stops whatever was being read before."""
         await self.stop()
         engine = self._engine()
@@ -102,27 +154,27 @@ class Speaker:
             return
         self._run += 1
         run = self._run
-        self._set_button(button)
+        self._set_active(key or "_")
         if language == HEBREW:
-            parts = [expand_abbreviations(p) for p in parts]
+            parts = [prepare_hebrew(p, self.app.settings) for p in parts]
         try:
             for piece in chunks(parts):
                 if run != self._run:
                     return
                 self._done.clear()
-                await engine.speak(piece, language=language, rate=self.app.settings["speech_rate"])
-                # wait until this piece is spoken (generous timeout: ~12 chars per second)
-                try:
+                await engine.speak(piece, language=language, rate=self.app.settings["speech_rate"],
+                                   voice=self._voice(language))
+                try:  # wait until this piece is spoken (generous: ~6 chars per second)
                     await asyncio.wait_for(self._done.wait(), timeout=30 + len(piece) / 6)
                 except asyncio.TimeoutError:
                     pass
         finally:
             if run == self._run:
-                self._set_button(None)
+                self._set_active(None)
 
     async def stop(self):
         self._run += 1
-        self._set_button(None)
+        self._set_active(None)
         if self._tts is not None:
             try:
                 await self._tts.stop()
@@ -130,36 +182,74 @@ class Speaker:
                 pass
         self._done.set()
 
-    def _set_button(self, button):
-        old, self.active_button = self.active_button, button
-        for b in (old, button):
-            if b is not None:
-                b.refresh()
+    async def voices(self, language: str) -> list[dict]:
+        engine = self._engine()
+        if engine is None:
+            return []
+        prefix = language.split("-")[0].lower()
+        all_voices = await engine.get_voices()
+        return sorted((v for v in all_voices if str(v.get("locale", "")).lower().startswith(prefix)),
+                      key=lambda v: (v.get("network_required") == "1", v.get("name", "")))
+
+    async def sample(self, voice: dict, language: str):
+        text = "שלום, זה הקול שנבחר לקריאה." if language == HEBREW else "Hello, this is the selected voice."
+        await self.stop()
+        engine = self._engine()
+        if engine:
+            await engine.speak(text, language=language, rate=self.app.settings["speech_rate"],
+                               voice=voice)
+
+    # ---- buttons ----
+
+    def register(self, button):
+        self._buttons.setdefault(button.key_name, []).append(button)
+
+    def _set_active(self, key):
+        old, self.active_key = self.active_key, key
+        for k in {old, key} - {None}:
+            alive = []
+            for b in self._buttons.get(k, []):
+                if b.refresh():
+                    alive.append(b)
+            self._buttons[k] = alive
+        for listener in list(self.listeners):
+            try:
+                listener()
+            except Exception:
+                pass
 
 
 class SpeakButton(ft.IconButton):
-    """🔊 reads `get_parts()` aloud; while reading it turns into ⏹ (tap to stop)."""
+    """🔊 reads `get_parts()` aloud; while reading it turns into ⏹ (tap to stop).
+    `key` names WHAT is read (e.g. "inn", "torah:16:4"): a re-created button with the
+    same key still shows ⏹ and stops it."""
 
-    def __init__(self, app, get_parts, language=HEBREW, size=22, tooltip="Read aloud"):
-        super().__init__(icon=ft.Icons.VOLUME_UP_ROUNDED, icon_size=size, tooltip=tooltip,
-                         icon_color=ft.Colors.PRIMARY)
+    def __init__(self, app, get_parts, language=HEBREW, size=22, tooltip="Read aloud", key=None):
+        reading = app.speaker.active_key == key
+        super().__init__(icon=ft.Icons.STOP_CIRCLE_ROUNDED if reading else ft.Icons.VOLUME_UP_ROUNDED,
+                         icon_size=size, tooltip=tooltip,
+                         icon_color=ft.Colors.ERROR if reading else ft.Colors.PRIMARY)
         self._app = app
+        self.key_name = key or f"button-{id(self)}"
         self._get_parts = get_parts
         self._language = language
         self.on_click = self._clicked
+        app.speaker.register(self)
 
     async def _clicked(self, e):
         speaker = self._app.speaker
-        if speaker.active_button is self:
+        if speaker.active_key == self.key_name:
             await speaker.stop()
         else:
-            await speaker.say(self._get_parts(), self._language, button=self)
+            await speaker.say(self._get_parts(), self._language, key=self.key_name)
 
-    def refresh(self):
-        reading = self._app.speaker.active_button is self
+    def refresh(self) -> bool:
+        """Update the icon. False if this button is no longer on screen."""
+        reading = self._app.speaker.active_key == self.key_name
         self.icon = ft.Icons.STOP_CIRCLE_ROUNDED if reading else ft.Icons.VOLUME_UP_ROUNDED
         self.icon_color = ft.Colors.ERROR if reading else ft.Colors.PRIMARY
         try:
             self.update()
-        except Exception:  # not on screen (e.g. its window was rebuilt)
-            pass
+            return True
+        except Exception:
+            return False

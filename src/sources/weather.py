@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 import flet as ft
 
 from core.source import Source
+from core.speech import HEBREW, SpeakButton
 from ui.widgets import feed_row, fs
 
 FORECAST = "https://api.open-meteo.com/v1/forecast"
@@ -84,7 +85,13 @@ class Weather(Source):
 
     def header_extras(self, app):
         city = app.settings["weather_city"]
-        return [ft.Container(
+
+        def forecast_text():
+            entry = app.cache.get(self.id)
+            return spoken_forecast(entry["data"], app.settings["weather_show_days"]) if entry else []
+
+        return [SpeakButton(app, forecast_text, HEBREW, tooltip="הקרא את התחזית", key="weather"),
+                ft.Container(
             ft.Row([ft.Icon(ft.Icons.LOCATION_ON_ROUNDED, size=18, color=ft.Colors.PRIMARY),
                     ft.Text(city["name"], size=14, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                     ft.Icon(ft.Icons.SEARCH_ROUNDED, size=18, color=ft.Colors.ON_SURFACE_VARIANT)],
@@ -188,6 +195,60 @@ def hourly_graph(hours: list, app) -> ft.Control:
         ft.Row([column(h) for h in hours], spacing=2, scroll=ft.ScrollMode.AUTO),
         padding=ft.Padding.symmetric(horizontal=8, vertical=12),
     )
+
+
+# ---------------------------------------------------------------- reading aloud
+
+RAIN_CODES = {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99}
+
+
+def _spoken_hour(hour: int) -> str:
+    """14 -> '2 אחר הצהריים', 9 -> '9 לפני הצהריים', 0 -> '12 בלילה'."""
+    if hour == 0:
+        return "12 בלילה"
+    if hour < 5:
+        return f"{hour} בלילה"
+    if hour < 12:
+        return f"{hour} לפני הצהריים"
+    if hour == 12:
+        return "12 בצהריים"
+    return f"{hour - 12} אחר הצהריים"
+
+
+def _rain_ranges(hours: list) -> list[str]:
+    """Consecutive rainy hours (rain weather code or 50%+ chance) -> 'גשם בין השעות X עד Y'."""
+    rainy = [int(h["time"][11:13]) for h in hours if h["code"] in RAIN_CODES or h["rain"] >= 50]
+    ranges, start, prev = [], None, None
+    for hour in rainy + [None]:
+        if hour is not None and prev is not None and hour <= prev + 2:  # one dry hour = same rain spell
+            prev = hour
+            continue
+        if start is not None:
+            end = (prev + 1) % 24
+            ranges.append(f"גשם בין השעות {_spoken_hour(start)} עד {_spoken_hour(end)}")
+        start = prev = hour
+    return ranges
+
+
+def spoken_forecast(data: dict, include_days: bool) -> list[str]:
+    """היום - שני, מעלות תרשיחא, מעונן, 21 מעלות ביום עד 14 מעלות בלילה. גשם בין השעות ...
+    then the next days only if they are shown on screen."""
+    days = data["days"]
+    today = days[0]
+    d = date.fromisoformat(today["date"])
+    text, _, _ = sky(today["code"])
+    parts = [f'היום - {DAY_NAMES[d.weekday()]}, {data["city"]}, {text}, '
+             f'{today["max"]} מעלות ביום עד {today["min"]} מעלות בלילה.']
+    rain = _rain_ranges([h for h in data["hours"] if h["time"].startswith(today["date"])])
+    if rain:
+        parts.append(", ".join(rain) + ".")
+    if include_days:
+        for day in days[1:]:
+            d = date.fromisoformat(day["date"])
+            text, _, _ = sky(day["code"])
+            parts.append(f'יום {DAY_NAMES[d.weekday()]}, {text}, '
+                         f'{day["max"]} מעלות ביום עד {day["min"]} מעלות בלילה.')
+    return parts
 
 
 # ---------------------------------------------------------------- city search

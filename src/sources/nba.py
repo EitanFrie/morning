@@ -93,7 +93,7 @@ class NbaScores(Source):
             return [_spoken(g, app) for g in sorted(games, key=lambda g: order.get(g["status"], 3))]                 or ["No games today."]
 
         return [
-            SpeakButton(app, scores, ENGLISH, tooltip="Read the scores"),
+            SpeakButton(app, scores, ENGLISH, tooltip="Read the scores", key="nba"),
             ft.IconButton(ft.Icons.CHEVRON_LEFT_ROUNDED, on_click=shift(-1), tooltip="Previous day"),
             ft.TextButton(
                 day.strftime("%a %d/%m"),

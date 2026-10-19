@@ -39,6 +39,15 @@ class App:
         self.client = make_client()
         self.launcher = ft.UrlLauncher()
         self.speaker = Speaker(self)  # reading aloud (phone's own voice engine)
+        # Global "stop reading" button: shown (top bar / floating) only while something is read.
+        self.stop_reading = ft.IconButton(ft.Icons.STOP_CIRCLE_ROUNDED, icon_color=ft.Colors.ERROR,
+                                          tooltip="Stop reading", visible=False,
+                                          on_click=self._stop_reading_click)
+        self.stop_fab = ft.FloatingActionButton(icon=ft.Icons.STOP_ROUNDED, bgcolor=ft.Colors.ERROR,
+                                                foreground_color=ft.Colors.ON_ERROR,
+                                                tooltip="Stop reading", visible=False,
+                                                on_click=self._stop_reading_click)
+        self.speaker.listeners.append(self._speaking_changed)
 
         # Remember when you were here last, to mark new headlines.
         self.previous_visit = self.state.data["last_visit"]
@@ -112,14 +121,17 @@ class App:
         if self.wide:
             page.appbar = None
             page.drawer = None
+            page.floating_action_button = self.stop_fab
             page.controls.append(
                 ft.Row([build_sidebar(self), ft.VerticalDivider(width=1), feed], expand=True, spacing=0)
             )
         else:
+            page.floating_action_button = None
             page.appbar = ft.AppBar(
                 leading=ft.IconButton(ft.Icons.MENU_ROUNDED, on_click=self._open_drawer),
                 title=ft.Text("Morning", weight=ft.FontWeight.BOLD),
                 actions=[
+                    self.stop_reading,
                     ft.IconButton(ft.Icons.REFRESH_ROUNDED, tooltip="Refresh all", on_click=self._refresh_all_click),
                     ft.IconButton(ft.Icons.SETTINGS_ROUNDED, on_click=lambda e: self.open_settings()),
                 ],
@@ -158,6 +170,15 @@ class App:
             self._build_layout()
         elif self.page.drawer:
             self.page.drawer.controls = [build_sidebar(self, height=self.page.height)]
+        self.page.update()
+
+    async def _stop_reading_click(self, e):
+        await self.speaker.stop()
+
+    def _speaking_changed(self):
+        speaking = self.speaker.speaking
+        self.stop_reading.visible = speaking and not self.wide
+        self.stop_fab.visible = speaking and bool(self.wide)
         self.page.update()
 
     async def _open_drawer(self, e):

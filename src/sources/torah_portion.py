@@ -24,7 +24,8 @@ import httpx
 from bs4 import BeautifulSoup
 
 from core.source import Source
-from core.speech import HEBREW, SpeakButton
+from core.speech import HEBREW, SpeakButton, unknown_abbreviations
+from ui.abbreviation_teacher import open_teacher
 from core.storage import data_dir
 from core.text import clean
 from ui.widgets import empty_message, feed_row, fs, picker
@@ -126,11 +127,36 @@ class TorahPortion(Source):
 
         choices = self._choices(app)
         current = app.settings["torah_commentator"]
-        return [
-            picker(DAYS[day], [(str(i), d) for i, d in enumerate(DAYS)], pick_day, width=110),
-            picker(dict(choices).get(current, current), choices, pick_commentator, expand=True),
-            SpeakButton(app, lambda: self._read_all(app), HEBREW, tooltip="הקרא את כל הקטע"),
-        ]
+        # Two centered lines (a phone is too narrow for all four in one): pickers, then buttons.
+        return [ft.Column([
+            ft.Row([
+                picker(DAYS[day], [(str(i), d) for i, d in enumerate(DAYS)], pick_day, width=100),
+                picker(dict(choices).get(current, current), choices, pick_commentator, width=170),
+            ], spacing=8, alignment=ft.MainAxisAlignment.CENTER),
+            ft.Row([
+                SpeakButton(app, lambda: self._read_all(app), HEBREW, tooltip="הקרא את כל הקטע",
+                            key="torah:all"),
+                *self._teach_button(app),
+            ], spacing=8, alignment=ft.MainAxisAlignment.CENTER),
+        ], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER)]
+
+    def _teach_button(self, app) -> list[ft.Control]:
+        """🎓 + count, shown when today's text has abbreviations the voice can't read yet."""
+        entry = app.cache.get(self.id)
+        if not entry:
+            return []
+        texts = [t for v in entry["data"]["verses"] for t in [v["text"], *v["comments"]]]
+        unknown = unknown_abbreviations(texts, app.settings)
+        if not unknown:
+            return []
+
+        def done():
+            app.sections[self.id].rerender()
+            app.page.update()
+
+        return [ft.IconButton(ft.Icons.SCHOOL_ROUNDED, icon_color=ft.Colors.PRIMARY,
+                              badge=str(len(unknown)), tooltip="ללמד קיצורים לא מוכרים",
+                              on_click=lambda e: open_teacher(app, unknown, texts, done))]
 
     def _read_all(self, app) -> list[str]:
         """Everything on screen: each verse, then the chosen commentator on it."""
@@ -180,7 +206,7 @@ class TorahPortion(Source):
                 app, verse["text"], meta=verse["label"], details=details,
                 expanded=True, title_lines=None, title_bold=False,
                 trailing=SpeakButton(app, lambda v=verse: _spoken_verse(v, heb), HEBREW, size=20,
-                                     tooltip="הקרא פסוק"),
+                                     tooltip="הקרא פסוק", key=f'torah:{verse["label"]}'),
             ))
         return ft.Column(rows, spacing=0, rtl=True)
 

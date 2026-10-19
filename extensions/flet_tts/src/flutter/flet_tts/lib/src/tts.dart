@@ -25,6 +25,13 @@ class TtsService extends FletService {
     switch (name) {
       case "speak":
         await tts.setLanguage(args["language"] ?? "he-IL");
+        final voice = args["voice"];
+        if (voice is Map && voice["name"] != null) {
+          await tts.setVoice({
+            "name": "${voice["name"]}",
+            "locale": "${voice["locale"] ?? args["language"] ?? "he-IL"}",
+          });
+        }
         await tts.setSpeechRate((args["rate"] ?? 0.5).toDouble());
         await tts.setPitch((args["pitch"] ?? 1.0).toDouble());
         return await tts.speak(args["text"] ?? "");
@@ -32,6 +39,11 @@ class TtsService extends FletService {
         return await tts.stop();
       case "is_language_available":
         return await tts.isLanguageAvailable(args["language"] ?? "he-IL");
+      case "get_voices":
+        final voices = await tts.getVoices;
+        return (voices as List? ?? [])
+            .map((v) => Map<String, dynamic>.from(v as Map))
+            .toList();
       case "max_input_length":
         return await tts.getMaxSpeechInputLength;
       default:

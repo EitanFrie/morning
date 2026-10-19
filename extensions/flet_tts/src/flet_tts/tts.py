@@ -22,11 +22,18 @@ class Tts(ft.Service):
     """Fires when the engine reports an error (e.data holds the message)."""
 
     async def speak(self, text: str, language: str = "he-IL", rate: float = 0.5,
-                    pitch: float = 1.0):
-        """Start speaking and return right away; on_complete fires when done."""
+                    pitch: float = 1.0, voice: Optional[dict] = None):
+        """Start speaking and return right away; on_complete fires when done.
+        voice: {"name": ..., "locale": ...} from get_voices(), or None for the default."""
         await self._invoke_method(
-            "speak", {"text": text, "language": language, "rate": rate, "pitch": pitch}
+            "speak", {"text": text, "language": language, "rate": rate, "pitch": pitch,
+                      "voice": voice}
         )
+
+    async def get_voices(self) -> list[dict]:
+        """Voices installed on the phone: [{"name", "locale", "quality", "network_required"}].
+        (Android does not report male/female - choose by listening.)"""
+        return list(await self._invoke_method("get_voices", timeout=15) or [])
 
     async def stop(self):
         await self._invoke_method("stop")

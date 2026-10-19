@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import flet as ft
 
+from core.speech import ENGLISH, HEBREW, normalize_quotes
 from core.storage import data_dir
 from core.updates import current_version
 from ui.widgets import card
@@ -35,6 +36,100 @@ def _row(label: str, control: ft.Control, hint: str | None = None) -> ft.Control
         text.append(ft.Text(hint, size=12, color=ft.Colors.ON_SURFACE_VARIANT))
     return ft.Row([ft.Column(text, spacing=0, expand=True), control],
                   vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+
+# ---------------------------------------------------------------- voices
+
+
+def _voice_row(app, language: str, label: str) -> ft.Control:
+    key = "voice_he" if language == HEBREW else "voice_en"
+    current = app.settings[key]
+    return _row(label, ft.OutlinedButton(
+        "Choose", icon=ft.Icons.RECORD_VOICE_OVER_ROUNDED,
+        on_click=lambda e: app.page.run_task(_choose_voice, app, language, key)),
+        current["name"] if current else "Phone default")
+
+
+async def _choose_voice(app, language: str, key: str):
+    """List the phone's voices for this language; ▶ plays a sample, tap the name to choose.
+    (Android doesn't say male/female - pick by ear.)"""
+    voices = await app.speaker.voices(language)
+    if not voices:
+        app.toast("No voices found (works in the phone app; install voices in Android settings)")
+        return
+
+    def choose(voice):
+        app.settings[key] = {"name": voice["name"], "locale": voice.get("locale", language)} if voice else None
+        app.page.pop_dialog()
+        app.toast("Voice saved")
+
+    def row(voice):
+        info = " · ".join(x for x in [voice.get("locale"), voice.get("quality"),
+                                       "needs internet" if voice.get("network_required") == "1" else ""] if x)
+        return ft.ListTile(
+            title=ft.Text(voice["name"], size=14),
+            subtitle=ft.Text(info, size=11),
+            leading=ft.IconButton(ft.Icons.PLAY_ARROW_ROUNDED, tooltip="Listen",
+                                  on_click=lambda e: app.page.run_task(app.speaker.sample, voice, language)),
+            on_click=lambda e: choose(voice),
+            selected=(app.settings[key] or {}).get("name") == voice["name"],
+        )
+
+    app.page.show_dialog(ft.AlertDialog(
+        title=ft.Text("Choose a voice"),
+        content=ft.Container(ft.Column(
+            [ft.Text("▶ to listen, tap the name to choose", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+             *[row(v) for v in voices]], scroll=ft.ScrollMode.AUTO, tight=True), width=380, height=420),
+        actions=[ft.TextButton("Phone default", on_click=lambda e: choose(None)),
+                 ft.TextButton("Close", on_click=lambda e: app.page.pop_dialog())],
+    ))
+
+
+# ---------------------------------------------------------------- abbreviations
+
+
+def _abbreviation_editor(app) -> list[ft.Control]:
+    """Your abbreviations: add manually, see and delete the ones you taught the app."""
+    listing = ft.Column(spacing=0)
+    short = ft.TextField(label='קיצור (למשל ואכמ"ל)', rtl=True, dense=True, expand=1)
+    full = ft.TextField(label="פירוש מלא", rtl=True, dense=True, expand=2)
+
+    def refresh():
+        learned = app.settings["user_abbreviations"]
+        listing.controls = [
+            ft.Row([ft.Text(f"{k}  ←  {v}", rtl=True, expand=True, size=14),
+                    ft.IconButton(ft.Icons.DELETE_OUTLINE_ROUNDED, tooltip="Delete",
+                                  on_click=lambda e, k=k: remove(k))])
+            for k, v in sorted(learned.items())
+        ] or [ft.Text("עדיין לא נוספו קיצורים", size=12, color=ft.Colors.ON_SURFACE_VARIANT, rtl=True)]
+
+    def save(table):
+        app.settings["user_abbreviations"] = table  # also saves the file
+        refresh()
+        listing.update()
+
+    def add(e):
+        k, v = normalize_quotes(short.value or "").strip(), (full.value or "").strip()
+        if not k or not v:
+            app.toast("Fill in both fields")
+            return
+        save({**app.settings["user_abbreviations"], k: v})
+        short.value = full.value = ""
+        short.update()
+        full.update()
+
+    def remove(k):
+        table = dict(app.settings["user_abbreviations"])
+        table.pop(k, None)
+        save(table)
+
+    refresh()
+    return [
+        ft.Text("נקראים במקום הקיצור בזמן הקראה. אפשר גם ללמד את האפליקציה מתוך חלון פרשת השבוע.",
+                size=12, color=ft.Colors.ON_SURFACE_VARIANT, rtl=True),
+        ft.Row([short, full, ft.IconButton(ft.Icons.ADD_CIRCLE_ROUNDED, tooltip="Add", on_click=add)], rtl=True),
+        listing,
+    ]
 
 
 def open_settings(app: "App"):
@@ -145,7 +240,11 @@ def open_settings(app: "App"):
                            _row("Articles in the feed", science)),
                     _group("Reading aloud", ft.Icons.RECORD_VOICE_OVER_ROUNDED,
                            _row("Speed", rate_text, "Uses your phone's voice (Settings > Text-to-speech)"),
-                           rate),
+                           rate,
+                           _voice_row(app, HEBREW, "Hebrew voice"),
+                           _voice_row(app, ENGLISH, "English voice")),
+                    _group("Abbreviations (for reading aloud)", ft.Icons.SPELLCHECK_ROUNDED,
+                           *_abbreviation_editor(app)),
                     _group("Auto refresh", ft.Icons.UPDATE_ROUNDED,
                            ft.Text("When the app opens, a section reloads by itself if its data "
                                    "is older than this. The refresh button on each section always works.",

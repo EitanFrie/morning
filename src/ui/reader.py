@@ -20,7 +20,8 @@ def open_article(app: "App", section_id: str, article: dict):
     """article = list-row data; article["content"] may be missing (not downloaded yet)."""
     section = app.sections[section_id]
     actions = [
-        SpeakButton(app, lambda: _spoken_article(article), HEBREW, tooltip="הקרא את הכתבה"),
+        SpeakButton(app, lambda: _spoken_article(article), article.get("language", HEBREW),
+                    tooltip="Read aloud", key=f'article:{article["url"]}'),
         ft.IconButton(ft.Icons.OPEN_IN_NEW_ROUNDED, tooltip="Open on website",
                       on_click=lambda e: app.open_url(article["url"])),
     ]
@@ -47,7 +48,7 @@ def _spoken_article(article: dict) -> list[str]:
     """Title, subtitle and text of the article (images skipped)."""
     content = article.get("content")
     if not content:
-        return ["הכתבה עדיין נטענת."]
+        return ["הכתבה עדיין נטענת." if article.get("language", HEBREW) == HEBREW else "Still loading."]
     parts = [content.get("title") or article["title"]]
     if content.get("subtitle"):
         parts.append(content["subtitle"])
@@ -58,6 +59,7 @@ def _spoken_article(article: dict) -> list[str]:
 def _article_body(app, article: dict, content: dict) -> ft.Control:
     paragraph = ft.TextStyle(height=1.6)
     parts: list[ft.Control] = []
+    rtl = article.get("language", HEBREW) == HEBREW  # Hebrew articles right-to-left, English left-to-right
     # Fit the window: full window width on a phone, at most MAX_WIDTH on a tablet.
     width = min(MAX_WIDTH, app.window_width() - 8)
     image_width = width - 32  # inside the 16 px padding on both sides
@@ -85,8 +87,9 @@ def _article_body(app, article: dict, content: dict) -> ft.Control:
         elif kind == "quote":
             parts.append(ft.Container(
                 ft.Text(block["text"], size=fs(app, 17), italic=True, style=paragraph),
-                padding=ft.Padding.only(right=14),
-                border=ft.Border(right=ft.BorderSide(3, ft.Colors.PRIMARY)),
+                padding=ft.Padding.only(right=14) if rtl else ft.Padding.only(left=14),
+                border=(ft.Border(right=ft.BorderSide(3, ft.Colors.PRIMARY)) if rtl
+                        else ft.Border(left=ft.BorderSide(3, ft.Colors.PRIMARY))),
             ))
         elif kind == "img" and block.get("src"):
             parts.append(ft.Column([
@@ -96,7 +99,7 @@ def _article_body(app, article: dict, content: dict) -> ft.Control:
 
     parts.append(ft.Container(height=40))
     return ft.Row(
-        [ft.Container(ft.Column(parts, spacing=14, rtl=True), width=width, padding=16)],
+        [ft.Container(ft.Column(parts, spacing=14, rtl=rtl), width=width, padding=16)],
         alignment=ft.MainAxisAlignment.CENTER,
     )
 
