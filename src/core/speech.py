@@ -86,16 +86,39 @@ def unknown_abbreviations(texts: list[str], settings) -> list[str]:
     return out
 
 
+_COMPILED: dict = {}  # table -> one combined pattern
+
+
+def _pattern_for(table: dict[str, str]):
+    """One search for a whole table (instead of one pass per abbreviation).
+    The prefix is LAZY ({0,2}?): a whole abbreviation (וכו') is tried before peeling a
+    prefix letter (ו + כו'); alternatives are longest first."""
+    key = tuple(table.items())
+    if key not in _COMPILED:
+        if len(_COMPILED) > 8:
+            _COMPILED.clear()
+        alternatives = "|".join(re.escape(k) for k in sorted(table, key=len, reverse=True))
+        _COMPILED[key] = re.compile(
+            rf"(?<![{LETTER}])([{PREFIXES}]{{0,2}}?)({alternatives})(?![{LETTER}])")
+    return _COMPILED[key]
+
+
+def _expand(text: str, table: dict[str, str]) -> str:
+    table = {k: v for k, v in table.items() if k != v}
+    if not table:
+        return text
+    return _pattern_for(table).sub(lambda m: m.group(1) + table[m.group(2)], text)
+
+
 def prepare_hebrew(text: str, settings=None) -> str:
-    """God's name -> השם, ה' -> השם, abbreviations -> full words (keeping a prefix letter)."""
+    """God's name -> השם, ה' -> השם, abbreviations -> full words (keeping a prefix letter).
+    YOUR abbreviations are applied in a first pass, so they always win; then the built-in list."""
     text = _TETRAGRAMMATON.sub(lambda m: m.group(1) + "השם", text)
     text = normalize_quotes(text)
-    text = re.sub(rf"(?<![{LETTER}])([{PREFIXES}]?)ה'(?![{LETTER}])", r"\1השם", text)
-    for short, full in all_abbreviations(settings).items():
-        if short == full:
-            continue
-        pattern = rf"(?<![{LETTER}])([{PREFIXES}]{{0,2}}){re.escape(short)}(?![{LETTER}])"
-        text = re.sub(pattern, lambda m: m.group(1) + full, text)
+    text = re.sub(rf"(?<![{LETTER}])([{PREFIXES}]?)ה'(?![{LETTER}])", r"השם", text)
+    user = dict(settings["user_abbreviations"]) if settings else {}
+    text = _expand(text, user)
+    text = _expand(text, {k: v for k, v in _built_in().items() if k not in user})
     return text
 
 

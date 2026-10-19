@@ -1,5 +1,9 @@
 # TODO
 
+## v0.5.3 — check on the phone
+- 388 built-in abbreviations (302 from the review). Faster expansion (one combined search).
+- Chizkuni & co.: invisible direction marks inside abbreviations (הקב״<LRM>ה) no longer break them.
+
 ## v0.5.2 — check on the phone
 - Fixed crash "No drawer defined" (menu tapped while a Settings screen was still on the stack).
 - Reading never overlaps: a new reading / stop waits until the old one has fully ended, and
@@ -15,10 +19,12 @@
 - Your abbreviations always win over the built-in list (even a longer built-in phrase).
   Settings list is folded ("הקיצורים שלך (N)") with a search box.
 
-## Idea: bigger built-in abbreviations.json
-Sefaria has no separate abbreviation dictionary - they are entries inside the Ben Yehuda
-dictionary (api/words). Possible one-time PC script: scan Rashi + main commentators on the whole
-Torah, collect every abbreviation, look each up, auto-add unambiguous ones, list the rest for review.
+## Abbreviations review — paused (can continue anytime)
+Built-in list: 86 hand-written + 302 reviewed = 388 (src/core/abbreviations.json), in v0.5.3.
+Reviewed 876 of 1458 harvested candidates (tools/abbr_candidates.json); progress is kept in
+tools/abbr_review.json. To continue: `.venv\Scripts\streamlit run toolseview_abbreviations.py`
+-> Submit -> ask Claude to merge tools/abbr_approved.json again (existing entries are kept).
+Harvest itself (only if adding commentators): `.venv\Scripts\python toolsuild_abbreviations.py`.
 
 ## v0.5.0 — check on the phone
 - Global stop button appears in the top bar while reading (tablet: floating red button).
