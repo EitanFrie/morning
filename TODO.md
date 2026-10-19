@@ -23,7 +23,6 @@
 Built-in list: 86 hand-written + 302 reviewed = 388 (src/core/abbreviations.json), in v0.5.3.
 Reviewed 876 of 1458 harvested candidates (tools/abbr_candidates.json); progress is kept in
 tools/abbr_review.json. To continue: `.venv\Scripts\streamlit run tools\review_abbreviations.py`
-eview_abbreviations.py`
 -> Submit -> ask Claude to merge tools/abbr_approved.json again (existing entries are kept).
 Harvest itself (only if adding commentators): `.venv\Scripts\python tools\build_abbreviations.py`.
 
