@@ -89,24 +89,42 @@ async def _choose_voice(app, language: str, key: str):
 
 
 def _abbreviation_editor(app) -> list[ft.Control]:
-    """Your abbreviations: add manually, see and delete the ones you taught the app."""
-    listing = ft.Column(spacing=0)
+    """Your abbreviations: add manually; the list is folded (tap to open) and searchable.
+    Yours always win over the built-in list."""
+    listing = ft.Column(spacing=0, visible=False)
     short = ft.TextField(label='קיצור (למשל ואכמ"ל)', rtl=True, dense=True, expand=1)
     full = ft.TextField(label="פירוש מלא", rtl=True, dense=True, expand=2)
+    search = ft.TextField(hint_text="חיפוש…", prefix_icon=ft.Icons.SEARCH_ROUNDED, rtl=True,
+                          dense=True, visible=False, on_change=lambda e: refresh(update=True))
+    header_text = ft.Text(rtl=True, weight=ft.FontWeight.W_600, expand=True)
+    arrow = ft.Icon(ft.Icons.EXPAND_MORE_ROUNDED)
 
-    def refresh():
+    def refresh(update=False):
         learned = app.settings["user_abbreviations"]
+        header_text.value = f"הקיצורים שלך ({len(learned)})"
+        query = normalize_quotes(search.value or "").strip()
+        rows = [(k, v) for k, v in sorted(learned.items())
+                if not query or query in k or query in v]
         listing.controls = [
             ft.Row([ft.Text(f"{k}  ←  {v}", rtl=True, expand=True, size=14),
                     ft.IconButton(ft.Icons.DELETE_OUTLINE_ROUNDED, tooltip="Delete",
                                   on_click=lambda e, k=k: remove(k))])
-            for k, v in sorted(learned.items())
-        ] or [ft.Text("עדיין לא נוספו קיצורים", size=12, color=ft.Colors.ON_SURFACE_VARIANT, rtl=True)]
+            for k, v in rows
+        ] or [ft.Text("אין קיצורים" if not learned else "לא נמצא", size=12,
+                      color=ft.Colors.ON_SURFACE_VARIANT, rtl=True)]
+        if update:
+            for c in (header_text, listing):
+                c.update()
+
+    def toggle(e):
+        listing.visible = search.visible = not listing.visible
+        arrow.icon = ft.Icons.EXPAND_LESS_ROUNDED if listing.visible else ft.Icons.EXPAND_MORE_ROUNDED
+        for c in (listing, search, arrow):
+            c.update()
 
     def save(table):
         app.settings["user_abbreviations"] = table  # also saves the file
-        refresh()
-        listing.update()
+        refresh(update=True)
 
     def add(e):
         k, v = normalize_quotes(short.value or "").strip(), (full.value or "").strip()
@@ -125,9 +143,13 @@ def _abbreviation_editor(app) -> list[ft.Control]:
 
     refresh()
     return [
-        ft.Text("נקראים במקום הקיצור בזמן הקראה. אפשר גם ללמד את האפליקציה מתוך חלון פרשת השבוע.",
+        ft.Text("נקראים במקום הקיצור בזמן הקראה, ותמיד גוברים על הרשימה המובנית. "
+                "אפשר גם ללמד את האפליקציה מתוך חלון פרשת השבוע (🎓).",
                 size=12, color=ft.Colors.ON_SURFACE_VARIANT, rtl=True),
         ft.Row([short, full, ft.IconButton(ft.Icons.ADD_CIRCLE_ROUNDED, tooltip="Add", on_click=add)], rtl=True),
+        ft.Container(ft.Row([header_text, arrow], rtl=True), ink=True, on_click=toggle,
+                     padding=ft.Padding.symmetric(vertical=8), border_radius=8),
+        search,
         listing,
     ]
 
@@ -188,6 +210,19 @@ def open_settings(app: "App"):
         on_change=on_science,
     )
 
+    # --- NBA news ---
+    news_count_text = ft.Text(str(s["nba_news_count"]), weight=ft.FontWeight.W_600, color=ft.Colors.PRIMARY)
+
+    def on_news_count(e):
+        s["nba_news_count"] = int(e.control.value)
+        news_count_text.value = str(s["nba_news_count"])
+        news_count_text.update()
+        app.sections["nba_news"].rerender()
+        app.page.update()
+
+    news_count = ft.Slider(min=1, max=12, divisions=11, value=s["nba_news_count"], label="{value}",
+                           on_change_end=on_news_count)
+
     # --- refresh timing per source ---
     def refresh_dropdown(source):
         current = s["refresh_minutes"].get(source.id, 30)
@@ -236,6 +271,9 @@ def open_settings(app: "App"):
                     _group("News flashes", ft.Icons.NEWSPAPER_ROUNDED,
                            _row("Show the last", hours_text, "How far back to load headlines"),
                            hours),
+                    _group("NBA News", ft.Icons.FEED_ROUNDED,
+                           _row("Headlines to show", news_count_text, "Featured stories from nba.com"),
+                           news_count),
                     _group("Science", ft.Icons.SCIENCE_ROUNDED,
                            _row("Articles in the feed", science)),
                     _group("Reading aloud", ft.Icons.RECORD_VOICE_OVER_ROUNDED,

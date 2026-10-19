@@ -1,5 +1,19 @@
 # TODO
 
+## v0.5.1 — check on the phone
+- Long readings: now read sentence by sentence (max ~400 chars), a failed piece is retried
+  once (before: a 3000-char piece that failed was silently lost = "stops in the middle").
+- ⏸/▶ next to ⏹ in the top bar (tablet: small floating bar). Pause resumes from the start of
+  the current sentence (Android's voice engine has no real pause).
+- NBA News: orange shade, Settings > NBA News > headlines to show (default 5).
+- Your abbreviations always win over the built-in list (even a longer built-in phrase).
+  Settings list is folded ("הקיצורים שלך (N)") with a search box.
+
+## Idea: bigger built-in abbreviations.json
+Sefaria has no separate abbreviation dictionary - they are entries inside the Ben Yehuda
+dictionary (api/words). Possible one-time PC script: scan Rashi + main commentators on the whole
+Torah, collect every abbreviation, look each up, auto-add unambiguous ones, list the rest for review.
+
 ## v0.5.0 — check on the phone
 - Global stop button appears in the top bar while reading (tablet: floating red button).
 - NBA scores stop button (was broken: refreshed buttons lost track of the reading).

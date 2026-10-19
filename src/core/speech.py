@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover
     Tts = None
 
 HEBREW, ENGLISH = "he-IL", "en-US"
-CHUNK = 3000  # Android's engine accepts ~4000 characters per utterance
+CHUNK = 400  # sentence-sized pieces: a failure costs one sentence (retried), pause/resume is exact
 
 LETTER = "א-ת"
 MARKS = "֑-ׇ"          # nikud + cantillation
@@ -53,9 +53,12 @@ def normalize_quotes(text: str) -> str:
 
 
 def all_abbreviations(settings) -> dict[str, str]:
-    """Built-in + learned (learned win), longest first so 'רבותינו ז"ל' beats 'ז"ל'."""
-    merged = {**_built_in(), **(settings["user_abbreviations"] if settings else {})}
-    return dict(sorted(merged.items(), key=lambda kv: -len(kv[0])))
+    """YOUR abbreviations first (they always win - even over a longer built-in phrase),
+    then the built-in list; each group longest first ('רבותינו ז"ל' before 'ז"ל')."""
+    user = dict(settings["user_abbreviations"]) if settings else {}
+    built_in = {k: v for k, v in _built_in().items() if k not in user}
+    by_length = lambda table: sorted(table.items(), key=lambda kv: -len(kv[0]))  # noqa: E731
+    return dict(by_length(user) + by_length(built_in))
 
 
 def known(abbreviation: str, settings) -> bool:
@@ -94,22 +97,30 @@ def prepare_hebrew(text: str, settings=None) -> str:
     return text
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?:׃;])\s+")
+
+
 def chunks(parts: list[str], size: int = CHUNK) -> list[str]:
-    """Join short parts and split long ones so each piece fits the engine's limit."""
-    out, current = [], ""
+    """Split into sentences, then join short ones into pieces of at most `size` characters.
+    Small pieces matter: Android's engine sometimes fails on long text (and the whole piece
+    was lost), and pause/resume restarts from the beginning of the current piece."""
+    sentences = []
     for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-        while len(part) > size:  # split a long part at a sentence end or space
-            cut = max(part.rfind(". ", 0, size), part.rfind(": ", 0, size), part.rfind(" ", 0, size))
-            cut = cut + 1 if cut > 0 else size
-            out.append(part[:cut])
-            part = part[cut:].strip()
-        if len(current) + len(part) + 2 > size and current:
+        for sentence in _SENTENCE_END.split(part.strip()):
+            sentence = sentence.strip()
+            while len(sentence) > size:  # a very long sentence: cut at a comma or space
+                cut = max(sentence.rfind(", ", 0, size), sentence.rfind(" ", 0, size))
+                cut = cut + 1 if cut > 0 else size
+                sentences.append(sentence[:cut])
+                sentence = sentence[cut:].strip()
+            if sentence:
+                sentences.append(sentence)
+    out, current = [], ""
+    for sentence in sentences:
+        if current and len(current) + len(sentence) + 1 > size:
             out.append(current)
             current = ""
-        current = f"{current}\n{part}" if current else part
+        current = f"{current} {sentence}" if current else sentence
     if current:
         out.append(current)
     return out
@@ -122,6 +133,11 @@ class Speaker:
         self._done = asyncio.Event()
         self._run = 0                  # increases on every new request / stop -> older loops quit
         self.active_key: str | None = None   # which button is reading
+        self._queue: list[str] = []          # pieces still to read
+        self._index = 0                      # current piece
+        self._language = HEBREW
+        self._paused = False
+        self._error = False
         self._buttons: dict[str, list] = {}  # key -> live buttons with that key
         self.listeners: list = []      # called on start/stop (e.g. the global stop button)
 
@@ -139,8 +155,8 @@ class Speaker:
         self._done.set()
 
     def _failed(self, e=None):
+        self._error = True  # _play retries the piece once
         self._done.set()
-        self.app.toast(f"Voice error: {getattr(e, 'data', '')}")
 
     def _voice(self, language):
         return self.app.settings["voice_he" if language == HEBREW else "voice_en"]
@@ -148,32 +164,80 @@ class Speaker:
     async def say(self, parts: list[str], language: str = HEBREW, key: str | None = None):
         """Read parts in order. Stops whatever was being read before."""
         await self.stop()
-        engine = self._engine()
-        if engine is None:
+        if self._engine() is None:
             self.app.toast("Reading aloud works in the phone app")
             return
-        self._run += 1
-        run = self._run
-        self._set_active(key or "_")
         if language == HEBREW:
             parts = [prepare_hebrew(p, self.app.settings) for p in parts]
+        self._queue, self._index, self._language = chunks(parts), 0, language
+        self._set_active(key or "_")
+        await self._play()
+
+    async def _play(self):
+        """Speak the queue from the current index until done, paused or stopped."""
+        self._run += 1
+        run = self._run
+        engine = self._engine()
+        retried = False
+        while self._index < len(self._queue):
+            if run != self._run:
+                return  # paused or stopped - the index stays on the interrupted piece
+            piece = self._queue[self._index]
+            self._done.clear()
+            self._error = False
+            await engine.speak(piece, language=self._language, rate=self.app.settings["speech_rate"],
+                               voice=self._voice(self._language))
+            try:  # wait until this piece is spoken (generous: ~5 chars per second)
+                await asyncio.wait_for(self._done.wait(), timeout=20 + len(piece) / 5)
+            except asyncio.TimeoutError:
+                pass
+            if run != self._run:
+                return
+            if self._error and not retried:
+                retried = True  # the engine failed on this piece: try it once more
+                continue
+            if self._error:
+                self.app.toast("A sentence could not be read - skipped")
+            retried = False
+            self._index += 1
+        if run == self._run:  # finished normally
+            self._queue = []
+            self._set_active(None)
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
+    async def pause(self):
+        """Stop the voice but remember where we are (resume repeats the current sentence)."""
+        if not self.speaking or self._paused:
+            return
+        self._paused = True
+        self._run += 1
         try:
-            for piece in chunks(parts):
-                if run != self._run:
-                    return
-                self._done.clear()
-                await engine.speak(piece, language=language, rate=self.app.settings["speech_rate"],
-                                   voice=self._voice(language))
-                try:  # wait until this piece is spoken (generous: ~6 chars per second)
-                    await asyncio.wait_for(self._done.wait(), timeout=30 + len(piece) / 6)
-                except asyncio.TimeoutError:
-                    pass
-        finally:
-            if run == self._run:
-                self._set_active(None)
+            await self._tts.stop()
+        except Exception:
+            pass
+        self._done.set()
+        self._notify()
+
+    async def resume(self):
+        if not self._paused:
+            return
+        self._paused = False
+        self._notify()
+        await self._play()
+
+    async def toggle_pause(self):
+        if self._paused:
+            await self.resume()
+        else:
+            await self.pause()
 
     async def stop(self):
         self._run += 1
+        self._paused = False
+        self._queue = []
         self._set_active(None)
         if self._tts is not None:
             try:
@@ -212,6 +276,9 @@ class Speaker:
                 if b.refresh():
                     alive.append(b)
             self._buttons[k] = alive
+        self._notify()
+
+    def _notify(self):
         for listener in list(self.listeners):
             try:
                 listener()

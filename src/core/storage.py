@@ -61,6 +61,7 @@ DEFAULT_SETTINGS = {
     "text_scale": 1.0,          # 0.9 | 1.0 | 1.15
     "inn_hours_back": 10,       # how many hours of news flashes to show
     "science_count": 3,         # 3 or 6 science articles
+    "nba_news_count": 5,        # how many NBA featured stories to show
     "timezone": "Asia/Jerusalem",  # used to show NBA tip-off times
     "torah_commentator": "Rashi",  # Sefaria name of the chosen commentator
     "weather_city": {"name": "ירושלים", "lat": 31.76904, "lon": 35.21633, "country": "ישראל"},

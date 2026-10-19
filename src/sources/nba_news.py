@@ -28,7 +28,7 @@ class NbaNews(Source):
     title = "NBA News"
     subtitle = "nba.com featured"
     icon = ft.Icons.FEED_ROUNDED
-    color = ft.Colors.INDIGO_600
+    color = ft.Colors.ORANGE_800  # a shade of the NBA window's orange
 
     async def fetch(self, app):
         response = await app.client.get(NEWS_URL)
@@ -60,7 +60,8 @@ class NbaNews(Source):
     def render(self, data, app):
         if not data["stories"]:
             return empty_message(ft.Icons.FEED_ROUNDED, "No featured stories right now")
-        return ft.Column([_story_row(s, app) for s in data["stories"]], spacing=0)
+        count = app.settings["nba_news_count"]  # Settings > NBA News (default 5)
+        return ft.Column([_story_row(s, app) for s in data["stories"][:count]], spacing=0)
 
 
 def _story_row(story: dict, app) -> ft.Control:
