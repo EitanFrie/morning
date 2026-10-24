@@ -8,9 +8,12 @@ NBA player tracker (top part of the NBA News window) + the draggable split betwe
   ~0.5 MB, only when you add someone).
 """
 
+from pathlib import Path
+
 import flet as ft
 
 from core.http import next_data
+from core.storage import data_dir
 from ui.widgets import fs, thumb
 
 ROSTER = "https://www.nba.com/team/{}/roster"
@@ -94,31 +97,60 @@ class SplitView(ft.Column):
 
 
 def tracker_panel(app, section_id: str, data: dict, editing: bool, on_edit_toggle) -> ft.Control:
-    """data = the NBA News data: {"players": {id: stats line}, "players_day": "YYYY-MM-DD"}."""
+    """data = NBA News data: {"players": {id: {"played", "text", "team"}}, "players_day": "YYYY-MM-DD"}.
+    Normal view: only the players who PLAYED that night. Edit view: everyone, with ▲▼ to reorder
+    and ✕ to remove."""
     players = app.settings["tracked_players"]
     lines = data.get("players") or {}
 
-    def remove(player):
-        app.settings["tracked_players"] = [p for p in players if p["id"] != player["id"]]
+    def save(new_list):
+        app.settings["tracked_players"] = new_list
         _rerender(app, section_id)
 
+    def move(index, step):
+        j = index + step
+        if 0 <= j < len(players):
+            new = list(players)
+            new[index], new[j] = new[j], new[index]
+            save(new)
+
+    def remove(player):
+        save([p for p in players if p["id"] != player["id"]])
+
     rows = []
-    for player in players:
-        line = lines.get(str(player["id"]), "No game last night")
+    for i, player in enumerate(players):
+        info = lines.get(str(player["id"])) or {}
+        if isinstance(info, str):  # data cached by an older version
+            info = {"played": "PTS" in info, "text": info}
+        if not editing and not info.get("played"):
+            continue  # didn't play (injury, coach's decision, no game) -> not shown
+        text = info.get("text") or "No game"
+        order = ft.Column([
+            ft.IconButton(ft.Icons.KEYBOARD_ARROW_UP_ROUNDED, icon_size=20, tooltip="Move up",
+                          disabled=i == 0, on_click=lambda e, i=i: move(i, -1),
+                          style=ft.ButtonStyle(padding=0), width=28, height=24),
+            ft.IconButton(ft.Icons.KEYBOARD_ARROW_DOWN_ROUNDED, icon_size=20, tooltip="Move down",
+                          disabled=i == len(players) - 1, on_click=lambda e, i=i: move(i, 1),
+                          style=ft.ButtonStyle(padding=0), width=28, height=24),
+        ], spacing=0, visible=editing)
         rows.append(ft.Container(
             ft.Row([
-                thumb(_logo(player["team"]), cover=False),
+                order,
+                _photo(app, player),
                 ft.Column([ft.Text(player["name"], size=fs(app, 15), weight=ft.FontWeight.W_600),
-                           ft.Text(line, size=fs(app, 12.5),
-                                   color=ft.Colors.PRIMARY if "PTS" in line else ft.Colors.ON_SURFACE_VARIANT)],
+                           ft.Text(f'{player["team"]} · {text}' if editing else text, size=fs(app, 12.5),
+                                   color=ft.Colors.PRIMARY if info.get("played") else ft.Colors.ON_SURFACE_VARIANT)],
                           spacing=1, expand=True),
                 ft.IconButton(ft.Icons.CLOSE_ROUNDED, tooltip="Stop tracking", visible=editing,
                               on_click=lambda e, p=player: remove(p)),
-            ], spacing=12),
-            padding=ft.Padding.symmetric(horizontal=14, vertical=6),
+            ], spacing=10),
+            padding=ft.Padding.symmetric(horizontal=10, vertical=4),
         ))
     if not players:
         rows.append(ft.Container(ft.Text("No players tracked yet - tap ✏️ to add",
+                                         color=ft.Colors.ON_SURFACE_VARIANT), padding=14))
+    elif not rows:
+        rows.append(ft.Container(ft.Text("None of your players played",
                                          color=ft.Colors.ON_SURFACE_VARIANT), padding=14))
 
     header = ft.Row([
@@ -130,6 +162,46 @@ def tracker_panel(app, section_id: str, data: dict, editing: bool, on_edit_toggl
                       tooltip="Done" if editing else "Edit players", on_click=lambda e: on_edit_toggle()),
     ])
     return ft.Column([ft.Container(header, padding=ft.Padding.only(left=14, right=6, top=4)), *rows], spacing=0)
+
+
+# ---------------------------------------------------------------- head photos
+
+HEADSHOT = "https://cdn.nba.com/headshots/nba/latest/260x190/{}.png"  # ~15 KB each
+
+
+def _headshot_file(player_id) -> Path:
+    folder = data_dir() / "headshots"
+    folder.mkdir(exist_ok=True)
+    return folder / f"{player_id}.png"
+
+
+async def download_headshots(app):
+    """Download the photo of each tracked player once; kept on the phone. Others are deleted."""
+    wanted = {str(p["id"]) for p in app.settings["tracked_players"]}
+    for player_id in wanted:
+        path = _headshot_file(player_id)
+        if path.exists():
+            continue
+        try:
+            response = await app.client.get(HEADSHOT.format(player_id))
+            if response.status_code == 200 and response.content[1:4] == b"PNG":
+                path.write_bytes(response.content)
+        except Exception:
+            pass  # no photo -> the team logo is shown
+    for path in (data_dir() / "headshots").glob("*.png"):
+        if path.stem not in wanted:  # player removed from the list
+            path.unlink(missing_ok=True)
+
+
+def _photo(app, player) -> ft.Control:
+    path = _headshot_file(player["id"])
+    if path.exists():
+        return ft.Container(
+            ft.Image(src=path.read_bytes(), fit=ft.BoxFit.COVER, width=52, height=52),
+            width=52, height=52, border_radius=26, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        )
+    return thumb(_logo(player["team"]), cover=False)
 
 
 def _day_label(day: str | None) -> str:

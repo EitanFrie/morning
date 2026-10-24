@@ -18,7 +18,7 @@ from core.source import Source
 from core.speech import ENGLISH
 from core.text import clean
 from ui.reader import open_article
-from ui.player_tracker import SplitView, tracker_panel
+from ui.player_tracker import SplitView, download_headshots, tracker_panel
 from ui.widgets import empty_message, feed_row
 
 NEWS_URL = "https://www.nba.com/news"
@@ -84,8 +84,14 @@ class NbaNews(Source):
 
 
 async def _tracked_player_lines(app) -> tuple[str, dict]:
-    """Last night's stats for the tracked players: the most recent day with finished games
-    (tonight's if they are over, otherwise the day before); only their teams' box scores."""
+    """Last night's stats for the tracked players, found by their permanent NBA id.
+
+    Day: the most recent one with finished games (tonight's if over, else the day before).
+    1. Box scores of the games of the players' saved teams (few downloads).
+    2. Anyone still not found (e.g. traded) -> the other finished games of that night too,
+       and his saved team is updated when he turns up on a new one.
+    Returns (day, {id: {"played": bool, "text": str, "team": code}}).
+    """
     from datetime import timedelta
 
     from sources.nba import FINAL, LIVE, _fetch_box_score, _game_from_card, default_game_day
@@ -93,7 +99,6 @@ async def _tracked_player_lines(app) -> tuple[str, dict]:
     tracked = app.settings["tracked_players"]
     if not tracked:
         return "", {}
-    teams = {p["team"] for p in tracked}
     for day in (default_game_day(), default_game_day() - timedelta(days=1)):
         response = await app.client.get("https://www.nba.com/games", params={"date": day.isoformat()})
         response.raise_for_status()
@@ -106,21 +111,45 @@ async def _tracked_player_lines(app) -> tuple[str, dict]:
     else:
         return "", {}
 
-    mine = [g for g in games if g["status"] in (FINAL, LIVE)
-            and {g["away"]["code"], g["home"]["code"]} & teams]
-    boxes = await asyncio.gather(*(_fetch_box_score(app, g["id"]) for g in mine), return_exceptions=True)
-    lines = {}
-    for box in boxes:
-        if isinstance(box, Exception):
-            continue
-        for side in ("away", "home"):
-            for p in box[side]["players"]:
-                if p["played"]:
-                    lines[str(p["id"])] = (f'{p["pts"]} PTS · {p["reb"]} REB · {p["ast"]} AST · '
-                                           f'{p["min"]} MIN · FG {p["fg"]}')
-                else:
-                    reason = (p.get("note") or "").split(" - ")[-1]
-                    lines[str(p["id"])] = "Didn't play" + (f" ({reason})" if reason else "")
+    started = [g for g in games if g["status"] in (FINAL, LIVE)]
+    wanted = {str(p["id"]) for p in tracked}
+    lines: dict[str, dict] = {}
+
+    async def read(game_list):
+        boxes = await asyncio.gather(*(_fetch_box_score(app, g["id"]) for g in game_list),
+                                     return_exceptions=True)
+        for box in boxes:
+            if isinstance(box, Exception):
+                continue
+            for side in ("away", "home"):
+                for p in box[side]["players"]:
+                    pid = str(p["id"])
+                    if pid not in wanted:
+                        continue
+                    if p["played"]:
+                        text = (f'{p["pts"]} PTS · {p["reb"]} REB · {p["ast"]} AST · '
+                                f'{p["min"]} MIN · FG {p["fg"]}')
+                    else:
+                        reason = (p.get("note") or "").split(" - ")[-1]
+                        text = "Didn't play" + (f" ({reason})" if reason else "")
+                    lines[pid] = {"played": p["played"], "text": text, "team": box[side]["code"]}
+
+    teams = {p["team"] for p in tracked}
+    first = [g for g in started if {g["away"]["code"], g["home"]["code"]} & teams]
+    await read(first)
+    if wanted - set(lines):  # someone not found on his saved team (traded?) - look everywhere
+        await read([g for g in started if g not in first])
+
+    # keep the saved team up to date (logo fallback + next time's first pass)
+    changed = False
+    for player in tracked:
+        found = lines.get(str(player["id"]))
+        if found and found["team"] and found["team"] != player["team"]:
+            player["team"] = found["team"]
+            changed = True
+    if changed:
+        app.settings["tracked_players"] = list(tracked)
+    await download_headshots(app)
     return day.isoformat(), lines
 
 

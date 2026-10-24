@@ -1,5 +1,13 @@
 # TODO
 
+## v0.6.1 — check on the phone
+- Player tracker shows only players who PLAYED last night (edit view shows everyone).
+- Edit view: ▲▼ on the left to reorder, ✕ to remove.
+- Head photos from nba.com (~15 KB each), downloaded once per tracked player, stored on the phone
+  (deleted when the player is removed); team logo if no photo.
+- Trades: players are found by their permanent NBA id; if not on the saved team's game, the other
+  games of the night are checked and the saved team is updated.
+
 ## v0.6.0 — check on the phone
 - Long headlines cut with "…": tap to see the whole headline (expanded rows show it whole too).
 - NBA rows: each team's record under its logo (Bulls 1-1 / Bucks 0-2), top scorers below.
