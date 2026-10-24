@@ -185,6 +185,8 @@ async def _fetch_box_score(app, game_id: str) -> dict:
             s = p.get("statistics") or {}
             played = bool(s.get("minutes")) and s.get("minutes") not in ("0:00", "00:00")
             players.append({
+                "id": p.get("personId"),  # used by the player tracker (NBA News window)
+                "full_name": f'{p.get("firstName", "")} {p.get("familyName", "")}'.strip(),
                 "name": p.get("nameI") or f'{p.get("firstName", "")} {p.get("familyName", "")}',
                 "pos": p.get("position", ""),
                 "played": played,
@@ -259,6 +261,13 @@ def _meta(game: dict, app) -> ft.Control:
     return ft.Row(parts, spacing=6, tight=True)
 
 
+def _logo_with_record(team: dict) -> ft.Control:
+    """Team logo with its win-loss record under it (like nba.com: Bulls 1-1)."""
+    return ft.Column([thumb(logo_url(team["code"]), cover=False),
+                      ft.Text(team.get("record") or "", size=11, color=ft.Colors.ON_SURFACE_VARIANT)],
+                     spacing=2, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+
 def _game_row(game: dict, app) -> ft.Control:
     """Away logo | Pistons 118 - 100 Hornets | home logo  (the loser is dimmed when final)."""
     away, home = game["away"], game["home"]
@@ -277,14 +286,14 @@ def _game_row(game: dict, app) -> ft.Control:
         title = [team_span(away, home), ft.TextSpan("  @  "), team_span(home, away)]
 
     leaders = " · ".join(x for x in [away["leader"], home["leader"]] if x)
-    subtitle = leaders or f'{away["record"]} · {home["record"]}'
+    subtitle = leaders or None
     return feed_row(
         app,
         title,
         meta=_meta(game, app),
         subtitle=subtitle,
-        leading=thumb(logo_url(away["code"]), cover=False),
-        trailing=thumb(logo_url(home["code"]), cover=False),
+        leading=_logo_with_record(away),
+        trailing=_logo_with_record(home),
         center=True,
         on_click=(lambda e: open_box_score(app, "nba", game)) if started and game.get("box") else None,
     )

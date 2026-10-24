@@ -1,5 +1,13 @@
 # TODO
 
+## v0.6.0 — check on the phone
+- Long headlines cut with "…": tap to see the whole headline (expanded rows show it whole too).
+- NBA rows: each team's record under its logo (Bulls 1-1 / Bucks 0-2), top scorers below.
+- NBA News: 3 headlines by default; window split - tracked players on top, news below.
+  Bar between them: DRAG it (finger) or TAP it (20% -> 35% -> 50%). Drag could not be tested in
+  the PC preview (mouse drags arrive as one jump) - check on the phone.
+  ✏️ -> Add player (team -> roster) / ✕ remove. Stats = most recent day with finished games.
+
 ## v0.5.3 — check on the phone
 - 388 built-in abbreviations (302 from the review). Faster expansion (one combined search).
 - Chizkuni & co.: invisible direction marks inside abbreviations (הקב״<LRM>ה) no longer break them.

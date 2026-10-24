@@ -18,6 +18,7 @@ from core.source import Source
 from core.speech import ENGLISH
 from core.text import clean
 from ui.reader import open_article
+from ui.player_tracker import SplitView, tracker_panel
 from ui.widgets import empty_message, feed_row
 
 NEWS_URL = "https://www.nba.com/news"
@@ -29,6 +30,10 @@ class NbaNews(Source):
     subtitle = "nba.com featured"
     icon = ft.Icons.FEED_ROUNDED
     color = ft.Colors.ORANGE_800  # a shade of the NBA window's orange
+    fills_window = True           # players on top, news below, a draggable bar between them
+
+    def __init__(self):
+        self.editing = False      # player list in edit mode (add / remove)
 
     async def fetch(self, app):
         response = await app.client.get(NEWS_URL)
@@ -55,13 +60,68 @@ class NbaNews(Source):
         for story, page in zip(stories, pages):
             ok = not isinstance(page, Exception) and page.status_code == 200
             story["content"] = parse_story(page.text) if ok else None
-        return {"stories": stories}
+        players_day, players = await _tracked_player_lines(app)
+        return {"stories": stories, "players": players, "players_day": players_day}
 
     def render(self, data, app):
-        if not data["stories"]:
-            return empty_message(ft.Icons.FEED_ROUNDED, "No featured stories right now")
-        count = app.settings["nba_news_count"]  # Settings > NBA News (default 5)
-        return ft.Column([_story_row(s, app) for s in data["stories"][:count]], spacing=0)
+        section = app.sections.get(self.id)
+        scroll = section.scroller if section else (lambda c: ft.Column([c], scroll=ft.ScrollMode.AUTO, expand=True))
+
+        count = app.settings["nba_news_count"]  # Settings > NBA News (default 3)
+        stories = data["stories"][:count]
+        news = (ft.Column([_story_row(s, app) for s in stories], spacing=0) if stories
+                else empty_message(ft.Icons.FEED_ROUNDED, "No featured stories right now"))
+
+        def toggle_edit():
+            self.editing = not self.editing
+            app.sections[self.id].rerender()
+            app.page.update()
+
+        players = tracker_panel(app, self.id, data, self.editing, toggle_edit)
+        # Tapping a story opens it over the WHOLE window (both parts) - see open_article.
+        return SplitView(scroll(players), scroll(news), app.settings["nba_split"],
+                         on_ratio=lambda r: app.settings.__setitem__("nba_split", r))
+
+
+async def _tracked_player_lines(app) -> tuple[str, dict]:
+    """Last night's stats for the tracked players: the most recent day with finished games
+    (tonight's if they are over, otherwise the day before); only their teams' box scores."""
+    from datetime import timedelta
+
+    from sources.nba import FINAL, LIVE, _fetch_box_score, _game_from_card, default_game_day
+
+    tracked = app.settings["tracked_players"]
+    if not tracked:
+        return "", {}
+    teams = {p["team"] for p in tracked}
+    for day in (default_game_day(), default_game_day() - timedelta(days=1)):
+        response = await app.client.get("https://www.nba.com/games", params={"date": day.isoformat()})
+        response.raise_for_status()
+        props = next_data(response.text)["props"]["pageProps"]
+        cards = [c.get("cardData") or {} for m in (props.get("gameCardFeed") or {}).get("modules") or []
+                 for c in m.get("cards") or []]
+        games = [_game_from_card(c) for c in cards if c.get("gameId")]
+        if any(g["status"] in (FINAL, LIVE) for g in games):
+            break
+    else:
+        return "", {}
+
+    mine = [g for g in games if g["status"] in (FINAL, LIVE)
+            and {g["away"]["code"], g["home"]["code"]} & teams]
+    boxes = await asyncio.gather(*(_fetch_box_score(app, g["id"]) for g in mine), return_exceptions=True)
+    lines = {}
+    for box in boxes:
+        if isinstance(box, Exception):
+            continue
+        for side in ("away", "home"):
+            for p in box[side]["players"]:
+                if p["played"]:
+                    lines[str(p["id"])] = (f'{p["pts"]} PTS · {p["reb"]} REB · {p["ast"]} AST · '
+                                           f'{p["min"]} MIN · FG {p["fg"]}')
+                else:
+                    reason = (p.get("note") or "").split(" - ")[-1]
+                    lines[str(p["id"])] = "Didn't play" + (f" ({reason})" if reason else "")
+    return day.isoformat(), lines
 
 
 def _story_row(story: dict, app) -> ft.Control:

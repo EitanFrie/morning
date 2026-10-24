@@ -21,6 +21,7 @@ class Source:
     subtitle: str = ""              # small text under the title
     icon: ft.IconData = ft.Icons.ARTICLE_ROUNDED
     color: str = ft.Colors.INDIGO   # accent color of the section badge
+    fills_window: bool = False      # True: render() lays out the whole window (own scrolling)
 
     async def fetch(self, app: "App"):
         """Download + parse. Must return plain JSON-able data (dicts/lists/str/numbers),

@@ -186,9 +186,10 @@ def feed_row(
                       ft.Text(meta, text_align=align, size=fs(app, 12), color=ft.Colors.PRIMARY, weight=ft.FontWeight.W_600))
     # title: plain text, or a list of TextSpans for mixed styling (e.g. dimmed losing team)
     spans = title if isinstance(title, list) else None
-    middle.append(ft.Text(None if spans else title, spans=spans, size=fs(app, 16), max_lines=title_lines, text_align=align,
-                          overflow=ft.TextOverflow.ELLIPSIS if title_lines else None,
-                          weight=ft.FontWeight.W_600 if title_bold else None))
+    title_text = ft.Text(None if spans else title, spans=spans, size=fs(app, 16), max_lines=title_lines,
+                         text_align=align, overflow=ft.TextOverflow.ELLIPSIS if title_lines else None,
+                         weight=ft.FontWeight.W_600 if title_bold else None)
+    middle.append(title_text)
     if subtitle:
         middle.append(ft.Text(subtitle, text_align=align, size=fs(app, 12.5), color=ft.Colors.ON_SURFACE_VARIANT,
                               max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
@@ -215,20 +216,35 @@ def feed_row(
     box = ft.Container(
         content=ft.Column(content, spacing=0),
         padding=ROW_PADDING,
-        ink=bool(on_click or details is not None),
+        ink=True,
         animate_size=FAST,
         border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.45, ft.Colors.OUTLINE_VARIANT))),
     )
     if details is not None:
+        def full_title(is_open):  # an open row shows its whole headline
+            if title_lines:
+                title_text.max_lines = None if is_open else title_lines
+                title_text.overflow = None if is_open else ft.TextOverflow.ELLIPSIS
+
+        full_title(expanded)
+
         def toggle(e):
             details_box.visible = not details_box.visible
             chevron.rotate = math.pi if details_box.visible else 0
+            full_title(details_box.visible)
             if on_toggle:
                 on_toggle(details_box.visible)
             box.update()
         box.on_click = toggle
     elif on_click:
         box.on_click = on_click
+    elif title_lines:
+        # Nothing to open: a tap shows the whole headline (if it was cut with "…"), tap again to shrink.
+        def show_whole_title(e):
+            title_text.max_lines = None if title_text.max_lines else title_lines
+            title_text.overflow = None if title_text.max_lines is None else ft.TextOverflow.ELLIPSIS
+            box.update()
+        box.on_click = show_whole_title
     return box
 
 

@@ -61,7 +61,9 @@ DEFAULT_SETTINGS = {
     "text_scale": 1.0,          # 0.9 | 1.0 | 1.15
     "inn_hours_back": 10,       # how many hours of news flashes to show
     "science_count": 3,         # 3 or 6 science articles
-    "nba_news_count": 5,        # how many NBA featured stories to show
+    "nba_news_count": 3,        # how many NBA featured stories to show
+    "nba_split": 0.3,           # NBA News window: share of the players part (drag the bar)
+    "tracked_players": [],      # [{"id", "name", "team"}] - shown with last night's stats
     "timezone": "Asia/Jerusalem",  # used to show NBA tip-off times
     "torah_commentator": "Rashi",  # Sefaria name of the chosen commentator
     "weather_city": {"name": "ירושלים", "lat": 31.76904, "lon": 35.21633, "country": "ישראל"},
@@ -80,6 +82,12 @@ DEFAULT_SETTINGS = {
 class Settings(JsonFile):
     def __init__(self):
         super().__init__("settings.json", DEFAULT_SETTINGS)
+        # One-time adjustments when a default changes (only if you still had the old default).
+        if self.data.get("settings_version", 0) < 1:
+            if self.data.get("nba_news_count") == 5:  # default was 5, now 3
+                self.data["nba_news_count"] = 3
+            self.data["settings_version"] = 1
+            self.save()
 
     def __getitem__(self, key):
         return self.data[key]

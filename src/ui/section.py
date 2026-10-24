@@ -75,7 +75,13 @@ class Section:
             transition=ft.AnimatedSwitcherTransition.FADE,
             switch_in_curve=ft.AnimationCurve.EASE_OUT,
         )
-        self.list_layer = self._scroller(self.body)
+        if source.fills_window:
+            # The source lays out the whole window itself (e.g. NBA News: players + news,
+            # each scrolling on its own) - no single outer scroll area.
+            self.body = ft.Container(content=self.body.content, expand=True)
+            self.list_layer = self.body
+        else:
+            self.list_layer = self._scroller(self.body)
 
         # ---- detail layer (slides in from the side, covers only this window) ----
         self.detail_layer = ft.Container(
@@ -100,6 +106,11 @@ class Section:
         )
 
     # ---------------------------------------------------------------- scrolling
+
+    def scroller(self, content: ft.Control) -> ft.Column:
+        """For sources with their own layout: a scroll area that also moves to the
+        next/previous window when pulled past its end."""
+        return self._scroller(content)
 
     def _scroller(self, content: ft.Control) -> ft.Column:
         """A scroll area inside the window that hands over to the next/previous
